@@ -94,7 +94,7 @@ custom_providers:
     install_hint: "Contact infra"
 ```
 
-Recents and favorites are stored at `~/Library/Caches/zap/state.json` (macOS), `~/.cache/zap/state.json` (Linux), or `%LOCALAPPDATA%\zap\state.json` (Windows). zap manages this file — don't hand-edit.
+Favorites, recents, and per-provider flag preferences are stored at `~/Library/Application Support/zap/state.json` (macOS), `~/.config/zap/state.json` (Linux), or `%APPDATA%\zap\state.json` (Windows). zap manages this file — don't hand-edit.
 
 ## Built-in providers
 

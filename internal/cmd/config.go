@@ -56,7 +56,7 @@ func newConfigCmd() *cobra.Command {
 			_ = dir
 			editor := os.Getenv("EDITOR")
 			if editor == "" {
-				editor = "vim"
+				editor = defaultEditor()
 			}
 			cmd2 := exec.Command(editor, path)
 			cmd2.Stdin = os.Stdin

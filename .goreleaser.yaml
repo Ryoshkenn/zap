@@ -43,12 +43,53 @@ snapshot:
   version_template: "{{ incpatch .Version }}-snapshot"
 
 changelog:
+  use: github
   sort: asc
+  groups:
+    - title: ✨ Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 🐛 Bug fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: ⚡ Performance
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: 📝 Documentation
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: 🧹 Other
+      order: 999
   filters:
     exclude:
-      - '^docs:'
       - '^test:'
       - '^chore:'
+      - '^ci:'
+
+release:
+  github:
+    owner: Ryoshkenn
+    name: zap
+  prerelease: auto
+  header: |
+    ## zap {{ .Tag }}
+
+    Terminal launcher for AI coding CLIs — Claude, Codex, Gemini, opencode, and friends.
+
+    ### Install
+    ```sh
+    # macOS / Linux (Homebrew)
+    brew install Ryoshkenn/zap/zap
+
+    # Windows (Scoop)
+    scoop bucket add zap https://github.com/Ryoshkenn/scoop-zap
+    scoop install zap
+
+    # Any platform (Go)
+    go install github.com/Ryoshkenn/zap/cmd/zap@{{ .Tag }}
+    ```
+  footer: |
+    **Full Changelog**: https://github.com/Ryoshkenn/zap/compare/{{ .PreviousTag }}...{{ .Tag }}
 
 brews:
   - name: zap

@@ -51,8 +51,11 @@ type RecentFolder struct {
 }
 
 // StateDir returns the directory where state.json lives.
+// We use UserConfigDir (not UserCacheDir) because favorites, recents, and
+// preferred flags are user data — cache dirs are documented as regenerable
+// and may be wiped by the OS or cleanup tools.
 func StateDir() (string, error) {
-	base, err := os.UserCacheDir()
+	base, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
