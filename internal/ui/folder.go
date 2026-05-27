@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -252,7 +253,7 @@ func (m *browseModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter", "right", "l":
 			// Descend into highlighted subdirectory.
 			if len(m.entries) > 0 {
-				m.cwd = m.cwd + string(os.PathSeparator) + m.entries[m.cursor].Name()
+				m.cwd = childOf(m.cwd, m.entries[m.cursor].Name())
 				m.cursor = 0
 				m.refresh()
 			}
@@ -305,16 +306,17 @@ func (m *browseModel) View() string {
 }
 
 func parentOf(p string) string {
-	if p == "/" || p == "" {
+	if p == "" {
 		return p
 	}
-	for i := len(p) - 1; i >= 0; i-- {
-		if p[i] == os.PathSeparator {
-			if i == 0 {
-				return "/"
-			}
-			return p[:i]
-		}
+	clean := filepath.Clean(p)
+	parent := filepath.Dir(clean)
+	if parent == "." {
+		return clean
 	}
-	return p
+	return parent
+}
+
+func childOf(parent, child string) string {
+	return filepath.Join(parent, child)
 }

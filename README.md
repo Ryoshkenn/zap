@@ -1,6 +1,6 @@
 # zap
 
-A terminal launcher for AI coding CLIs. Pick a folder, pick a provider (Claude Code, Codex, Gemini, opencode…), and zap.
+A terminal launcher for AI coding CLIs and coding apps. Pick a folder, pick a provider (Claude Code, Codex, Gemini, opencode, Cursor, Windsurf, VS Code…), and zap.
 
 ```
 Pick a folder                                                                                                             
@@ -63,6 +63,9 @@ zap claude --safe               # remove any default dangerous flags
 zap codex
 zap gemini ~/projects/foo
 zap opencode
+zap cursor ~/projects/foo
+zap windsurf ~/projects/foo
+zap vscode ~/projects/foo
 ```
 
 ### Favorites
@@ -112,6 +115,9 @@ Favorites, recents, and per-provider flag preferences are stored at `~/Library/A
 | Codex CLI | `codex` | |
 | Gemini CLI | `gemini` | |
 | opencode | `opencode` | |
+| Cursor | `cursor` or `/Applications/Cursor.app` | opens as an app by default |
+| Windsurf | `windsurf` or `/Applications/Windsurf.app` | opens as an app by default |
+| VS Code | `code` or `/Applications/Visual Studio Code.app` | opens as an app by default |
 
 Providers not installed are shown grayed out with an install hint.
 
@@ -138,7 +144,7 @@ That's it — no Go code required.
 
 - Interactive picker is built with [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 - On launch, zap `chdir`s into the chosen folder and (on Unix) `syscall.Exec`s the provider command — zap disappears, the CLI owns the TTY directly. On Windows, zap stays as a parent process and forwards stdin/stdout/stderr + exit code.
-- Provider detection uses `exec.LookPath`.
+- Provider detection uses `exec.LookPath` for CLIs and macOS app bundle detection for GUI coding apps.
 
 ## License
 

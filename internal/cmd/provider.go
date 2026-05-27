@@ -13,6 +13,11 @@ import (
 	"github.com/Ryoshkenn/zap/internal/state"
 )
 
+var (
+	launchExec = launch.Exec
+	launchOpen = launch.Open
+)
+
 // newProviderCmd builds `zap <provider> [path] [--yolo|--safe]`.
 func newProviderCmd(p config.Provider) *cobra.Command {
 	var yolo, safe bool
@@ -21,7 +26,8 @@ func newProviderCmd(p config.Provider) *cobra.Command {
 		Short: fmt.Sprintf("Launch %s", p.Name),
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if _, ok := detect.IsInstalled(p.Command); !ok {
+			st := resolveProviderStatus(p)
+			if !st.Installed {
 				if p.InstallHint != "" {
 					return fmt.Errorf("%s is not installed.\nInstall: %s", p.Name, p.InstallHint)
 				}
@@ -41,7 +47,7 @@ func newProviderCmd(p config.Provider) *cobra.Command {
 				_ = s.Save()
 			}
 
-			return launch.Exec(dir, p.Command, flags, os.Environ())
+			return launchProvider(dir, st, flags, s)
 		},
 	}
 	if hasYoloFlag(p) {
@@ -49,6 +55,26 @@ func newProviderCmd(p config.Provider) *cobra.Command {
 		c.Flags().BoolVar(&safe, "safe", false, "disable any default dangerous flags")
 	}
 	return c
+}
+
+func resolveProviderStatus(p config.Provider) detect.Status {
+	return detect.ProviderStatus(p)
+}
+
+func launchProvider(dir string, st detect.Status, flags []string, s *state.State) error {
+	mode := st.Provider.LaunchMode
+	if mode == "" {
+		mode = "terminal"
+	}
+	if s != nil {
+		if saved, ok := s.LaunchModeFor(st.Provider.ID); ok {
+			mode = saved
+		}
+	}
+	if mode == "app" {
+		return launchOpen(dir, st.Provider.Command, flags, st.AppBundlePath)
+	}
+	return launchExec(dir, st.Provider.Command, flags, os.Environ())
 }
 
 func resolveDir(args []string) (string, error) {

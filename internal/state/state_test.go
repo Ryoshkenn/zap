@@ -11,7 +11,10 @@ func withTempCache(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", dir)
-	// On darwin, UserCacheDir uses ~/Library/Caches and ignores XDG_CACHE_HOME.
+	// StateDir uses UserConfigDir, which on Linux reads XDG_CONFIG_HOME before HOME.
+	// Override it explicitly so the state file always lands in the temp dir.
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	// On darwin, UserConfigDir uses ~/Library/Application Support and ignores XDG vars.
 	// Override HOME so the macOS path also redirects to tempdir.
 	t.Setenv("HOME", dir)
 }
