@@ -1,16 +1,21 @@
 package ui
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestChildOfUsesPlatformPathJoin(t *testing.T) {
 	got := childOf("/tmp/project", "src")
-	if got != "/tmp/project/src" {
-		t.Fatalf("expected joined path, got %q", got)
+	want := filepath.Join("/tmp/project", "src")
+	if got != want {
+		t.Fatalf("expected joined path %q, got %q", want, got)
 	}
 }
 
 func TestParentOfRootStaysRoot(t *testing.T) {
-	if got := parentOf("/"); got != "/" {
-		t.Fatalf("expected root parent to stay root, got %q", got)
+	root := filepath.Clean("/")
+	if got := parentOf(root); got != root {
+		t.Fatalf("expected root parent to stay root as %q, got %q", root, got)
 	}
 }

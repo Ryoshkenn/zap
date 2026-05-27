@@ -17,6 +17,8 @@ func withTempCache(t *testing.T) {
 	// On darwin, UserConfigDir uses ~/Library/Application Support and ignores XDG vars.
 	// Override HOME so the macOS path also redirects to tempdir.
 	t.Setenv("HOME", dir)
+	// On Windows, UserConfigDir uses APPDATA.
+	t.Setenv("APPDATA", dir)
 }
 
 func TestSaveLoadRoundtrip(t *testing.T) {
