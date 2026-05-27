@@ -3,14 +3,22 @@
 A terminal launcher for AI coding CLIs. Pick a folder, pick a provider (Claude Code, Codex, Gemini, opencode…), and zap.
 
 ```
-$ zap
-┌─ Pick a folder ──────────────────────────┐
-│ ⭐ ~/projects/zap                         │
-│ 🕘 ~/work/api-server                      │
-│ 🕘 ~/projects/notes                       │
-│ 📁 Current: ~/Documents/code              │
-│ ➜  Browse folders…                        │
-└──────────────────────────────────────────┘
+Pick a folder                                                                                                             
+                                                                                                                             
+│ ⭐ ~/Documents/code                                                                                                        
+│ /Users/user/Documents/                                                                                        
+  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────-                                                                                                                           
+  🕘 ~                                                                                                                       
+  /Users/user                                                                                                       
+  🕘 ~/Documents/code                                                                                     
+  /Users/user/Documents/code                                                                  
+  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                             
+  📁 Current: ~/Documents/code/zap                                                                                           
+  /Users/user/Documents/code/zap                                                                                    
+  ➜  Browse folders…                                                                                                         
+                                                                                                                             
+  ⚙  Settings…
 ```
 
 ## Why
