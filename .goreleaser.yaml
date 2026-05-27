@@ -96,7 +96,8 @@ brews:
     repository:
       owner: Ryoshkenn
       name: homebrew-zap
-    homepage: https://github.com/Ryoshkenn/zap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://ryoshkenn.github.io/zap
     description: Terminal launcher for AI coding CLIs
     license: MIT
     commit_author:
@@ -110,6 +111,7 @@ scoops:
     repository:
       owner: Ryoshkenn
       name: scoop-zap
-    homepage: https://github.com/Ryoshkenn/zap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://ryoshkenn.github.io/zap
     description: Terminal launcher for AI coding CLIs
     license: MIT

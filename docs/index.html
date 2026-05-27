@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>zap — terminal launcher for AI coding CLIs</title>
+  <meta name="description" content="Pick a folder, pick a provider (Claude Code, Codex, Gemini, opencode), and zap. One keystroke to launch any AI CLI in any repo." />
+  <meta property="og:title" content="zap — terminal launcher for AI coding CLIs" />
+  <meta property="og:description" content="Pick a folder, pick a provider (Claude Code, Codex, Gemini, opencode), and zap." />
+  <meta property="og:image" content="https://ryoshkenn.github.io/zap/og.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0d0f;
+      --surface: #16161a;
+      --border: #2a2a30;
+      --text: #e8e8f0;
+      --muted: #888898;
+      --accent: #7c6af7;
+      --accent2: #a78bfa;
+      --green: #4ade80;
+      --yellow: #fbbf24;
+      --red: #f87171;
+      --blue: #60a5fa;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* NAV */
+    nav {
+      position: sticky;
+      top: 0;
+      background: rgba(13,13,15,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 100;
+    }
+    .nav-logo {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+    .nav-logo span { color: var(--accent2); }
+    .nav-links { display: flex; gap: 1.5rem; align-items: center; }
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.875rem;
+      transition: color 0.15s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-gh {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.3rem 0.75rem;
+      color: var(--text) !important;
+      font-size: 0.8rem;
+    }
+
+    /* HERO */
+    .hero {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 7rem 2rem 5rem;
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(124,106,247,0.12);
+      border: 1px solid rgba(124,106,247,0.3);
+      border-radius: 999px;
+      padding: 0.25rem 0.85rem;
+      font-size: 0.78rem;
+      color: var(--accent2);
+      margin-bottom: 2rem;
+      font-family: "SF Mono", "Fira Code", monospace;
+    }
+    h1 {
+      font-size: clamp(3rem, 8vw, 5.5rem);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      margin-bottom: 1.25rem;
+      background: linear-gradient(135deg, #fff 0%, var(--accent2) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-sub {
+      font-size: 1.2rem;
+      color: var(--muted);
+      max-width: 560px;
+      margin: 0 auto 3rem;
+      line-height: 1.7;
+    }
+    .hero-sub strong { color: var(--text); }
+
+    /* INSTALL TABS */
+    .install-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      max-width: 640px;
+      margin: 0 auto 3.5rem;
+      text-align: left;
+    }
+    .install-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: rgba(0,0,0,0.2);
+    }
+    .install-tab {
+      padding: 0.55rem 1.1rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+      cursor: pointer;
+      border: none;
+      background: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .install-tab.active {
+      color: var(--accent2);
+      border-bottom-color: var(--accent2);
+    }
+    .install-panel { display: none; padding: 1.25rem 1.5rem; }
+    .install-panel.active { display: block; }
+    .install-panel code {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.88rem;
+      color: var(--green);
+    }
+    .install-panel .comment { color: var(--muted); }
+    .install-panel .cmd { color: var(--text); }
+    .install-panel p { margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted); }
+
+    /* CTA BUTTONS */
+    .cta-row {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.65rem 1.4rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:hover { opacity: 0.85; transform: translateY(-1px); }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-ghost {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    /* TERMINAL DEMO */
+    .demo {
+      max-width: 700px;
+      margin: 5rem auto;
+      padding: 0 2rem;
+    }
+    .section-label {
+      text-align: center;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 2rem;
+    }
+    .terminal {
+      background: #0a0a0c;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.85rem;
+      line-height: 1.7;
+    }
+    .terminal-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.6rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-r { background: #ff5f57; }
+    .dot-y { background: #febc2e; }
+    .dot-g { background: #28c840; }
+    .terminal-title {
+      flex: 1;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .terminal-body { padding: 1.25rem 1.5rem; }
+    .t-prompt { color: var(--accent2); }
+    .t-cmd { color: var(--text); }
+    .t-border { color: var(--muted); }
+    .t-star { color: var(--yellow); }
+    .t-recent { color: var(--muted); }
+    .t-folder { color: var(--blue); }
+    .t-browse { color: var(--accent2); }
+    .t-sep { color: var(--border); }
+    .line { display: block; }
+
+    /* FEATURES */
+    .features {
+      max-width: 860px;
+      margin: 0 auto 6rem;
+      padding: 0 2rem;
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .feature {
+      background: var(--surface);
+      padding: 1.75rem;
+    }
+    .feature-icon { font-size: 1.5rem; margin-bottom: 0.75rem; }
+    .feature h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.4rem; }
+    .feature p { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+
+    /* PROVIDERS */
+    .providers {
+      max-width: 640px;
+      margin: 0 auto 6rem;
+      padding: 0 2rem;
+      text-align: center;
+    }
+    .provider-chips {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 1.5rem;
+    }
+    .chip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.4rem 1rem;
+      font-size: 0.82rem;
+      font-family: "SF Mono", "Fira Code", monospace;
+    }
+    .chip-add {
+      border-style: dashed;
+      color: var(--muted);
+    }
+
+    /* FOOTER */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 2rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+    footer .footer-links { display: flex; gap: 1.5rem; justify-content: center; margin-top: 0.75rem; }
+
+    @media (max-width: 600px) {
+      nav { padding: 0 1rem; }
+      .nav-links a:not(.nav-gh) { display: none; }
+      .hero { padding: 5rem 1.25rem 3rem; }
+      .features, .demo, .providers { padding: 0 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">zap<span>⚡</span></a>
+  <div class="nav-links">
+    <a href="#install">Install</a>
+    <a href="#features">Features</a>
+    <a href="https://github.com/Ryoshkenn/zap" target="_blank" rel="noopener" class="nav-gh">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0 1 12 6.8c.85.004 1.71.115 2.51.337 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.02 10.02 0 0 0 22 12c0-5.52-4.48-10-10-10z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-badge">⚡ v1.0 — open source, MIT</div>
+  <h1>zap</h1>
+  <p class="hero-sub">
+    A terminal launcher for <strong>AI coding CLIs</strong>.<br>
+    Pick a folder, pick a provider, press enter. That's it.
+  </p>
+
+  <div class="install-block" id="install">
+    <div class="install-tabs">
+      <button class="install-tab active" onclick="showTab('mac')">macOS</button>
+      <button class="install-tab" onclick="showTab('linux')">Linux</button>
+      <button class="install-tab" onclick="showTab('win')">Windows</button>
+      <button class="install-tab" onclick="showTab('go')">Go</button>
+    </div>
+    <div id="tab-mac" class="install-panel active">
+      <code>
+        <span class="comment"># Homebrew</span><br>
+        <span class="cmd">brew install Ryoshkenn/zap/zap</span>
+      </code>
+    </div>
+    <div id="tab-linux" class="install-panel">
+      <code>
+        <span class="comment"># Homebrew on Linux</span><br>
+        <span class="cmd">brew install Ryoshkenn/zap/zap</span>
+      </code>
+      <p>Don't have Homebrew? <a href="https://brew.sh" target="_blank" style="color:var(--accent2)">Install it here</a> — it works great on Linux too.</p>
+    </div>
+    <div id="tab-win" class="install-panel">
+      <code>
+        <span class="comment"># Scoop</span><br>
+        <span class="cmd">scoop bucket add zap https://github.com/Ryoshkenn/scoop-zap</span><br>
+        <span class="cmd">scoop install zap</span>
+      </code>
+    </div>
+    <div id="tab-go" class="install-panel">
+      <code>
+        <span class="comment"># Go 1.21+</span><br>
+        <span class="cmd">go install github.com/Ryoshkenn/zap/cmd/zap@latest</span>
+      </code>
+    </div>
+  </div>
+
+  <div class="cta-row">
+    <a href="https://github.com/Ryoshkenn/zap" class="btn btn-primary" target="_blank" rel="noopener">View on GitHub</a>
+    <a href="https://github.com/Ryoshkenn/zap/releases" class="btn btn-ghost" target="_blank" rel="noopener">Download binary</a>
+  </div>
+</section>
+
+<section class="demo">
+  <p class="section-label">Interactive picker</p>
+  <div class="terminal">
+    <div class="terminal-bar">
+      <div class="dot dot-r"></div>
+      <div class="dot dot-y"></div>
+      <div class="dot dot-g"></div>
+      <div class="terminal-title">zsh — 80×24</div>
+    </div>
+    <div class="terminal-body">
+      <span class="line"><span class="t-prompt">~ $</span> <span class="t-cmd">zap</span></span>
+      <span class="line">&nbsp;</span>
+      <span class="line"><span class="t-border">┌─ Pick a folder ───────────────────────────┐</span></span>
+      <span class="line"><span class="t-border">│</span> <span class="t-star">⭐</span> ~/projects/zap                          <span class="t-border">│</span></span>
+      <span class="line"><span class="t-border">│</span> <span class="t-recent">🕘</span> <span class="t-recent">~/work/api-server</span>                      <span class="t-border">│</span></span>
+      <span class="line"><span class="t-border">│</span> <span class="t-recent">🕘</span> <span class="t-recent">~/projects/notes</span>                       <span class="t-border">│</span></span>
+      <span class="line"><span class="t-border">│</span> <span class="t-folder">📁</span> Current: ~/Documents/code               <span class="t-border">│</span></span>
+      <span class="line"><span class="t-border">│</span> <span class="t-browse">➜</span>  Browse folders…                         <span class="t-border">│</span></span>
+      <span class="line"><span class="t-border">└───────────────────────────────────────────┘</span></span>
+      <span class="line">&nbsp;</span>
+      <span class="line"><span class="t-border">┌─ Pick a provider ─────────────────────────┐</span></span>
+      <span class="line"><span class="t-border">│</span> <span class="t-star">✦</span> Claude Code                              <span class="t-border">│</span></span>
+      <span class="line"><span class="t-border">│</span>   Codex CLI                                <span class="t-border">│</span></span>
+      <span class="line"><span class="t-border">│</span>   Gemini CLI                               <span class="t-border">│</span></span>
+      <span class="line"><span class="t-border">│</span>   opencode                                 <span class="t-border">│</span></span>
+      <span class="line"><span class="t-border">└───────────────────────────────────────────┘</span></span>
+    </div>
+  </div>
+</section>
+
+<section class="features" id="features">
+  <p class="section-label">Why zap</p>
+  <div class="features-grid">
+    <div class="feature">
+      <div class="feature-icon">⚡</div>
+      <h3>One keystroke</h3>
+      <p>Type <code style="font-family:monospace;color:var(--accent2)">zap</code>, pick a folder, pick a provider. Done. No more cd + long flag combos.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🔍</div>
+      <h3>Smart recents</h3>
+      <p>Favorites and recently used folders float to the top. Your most-used repos are always one keypress away.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🚀</div>
+      <h3>Direct exec on Unix</h3>
+      <p>On macOS and Linux, zap <code style="font-family:monospace;color:var(--accent2)">exec</code>s into the CLI — zap disappears, the tool owns the TTY directly.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🪟</div>
+      <h3>Windows native</h3>
+      <p>Full support via Scoop. Forwards stdin/stdout/stderr and exit codes cleanly.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🎛️</div>
+      <h3>Per-provider flags</h3>
+      <p>Toggle flags like <code style="font-family:monospace;color:var(--accent2)">--dangerously-skip-permissions</code> from the picker. No muscle memory needed.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🔧</div>
+      <h3>Extensible</h3>
+      <p>Add any CLI tool via a single YAML entry in <code style="font-family:monospace;color:var(--accent2)">~/.config/zap/config.yaml</code>. No Go required.</p>
+    </div>
+  </div>
+</section>
+
+<section class="providers">
+  <p class="section-label">Built-in providers</p>
+  <div class="provider-chips">
+    <span class="chip">✦ Claude Code</span>
+    <span class="chip">◆ Codex CLI</span>
+    <span class="chip">✧ Gemini CLI</span>
+    <span class="chip">⬡ opencode</span>
+    <span class="chip chip-add">+ add your own</span>
+  </div>
+</section>
+
+<footer>
+  <div>Made by <a href="https://github.com/Ryoshkenn" target="_blank">Ryoshkenn</a> · MIT License</div>
+  <div class="footer-links">
+    <a href="https://github.com/Ryoshkenn/zap" target="_blank">GitHub</a>
+    <a href="https://github.com/Ryoshkenn/zap/releases" target="_blank">Releases</a>
+    <a href="https://github.com/Ryoshkenn/zap/issues" target="_blank">Issues</a>
+    <a href="https://github.com/Ryoshkenn/zap/blob/main/README.md" target="_blank">Docs</a>
+  </div>
+</footer>
+
+<script>
+  function showTab(id) {
+    document.querySelectorAll('.install-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.install-panel').forEach(p => p.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('tab-' + id).classList.add('active');
+  }
+</script>
+</body>
+</html>
