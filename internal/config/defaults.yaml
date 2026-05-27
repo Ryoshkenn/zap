@@ -14,13 +14,32 @@ providers:
     command: codex
     icon: "🧠"
     install_hint: "npm install -g @openai/codex"
+    flags:
+      - id: yolo
+        label: "Dangerously bypass approvals & sandbox"
+        flag: "--dangerously-bypass-approvals-and-sandbox"
+        default: false
+      - id: full_auto
+        label: "Full auto (ask-on-request + workspace-write sandbox)"
+        flag: "--full-auto"
+        default: false
   - id: gemini
     name: Gemini CLI
     command: gemini
     icon: "✨"
     install_hint: "npm install -g @google/gemini-cli"
+    flags:
+      - id: yolo
+        label: "YOLO mode (auto-approve all tool calls)"
+        flag: "--yolo"
+        default: false
   - id: opencode
     name: opencode
     command: opencode
     icon: "📂"
     install_hint: "See https://github.com/sst/opencode"
+    flags:
+      - id: yolo
+        label: "Dangerously skip permissions"
+        flag: "--dangerously-skip-permissions"
+        default: false

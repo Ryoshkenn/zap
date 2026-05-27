@@ -20,16 +20,32 @@ type flagsModel struct {
 func newFlagsModel(a *app, st *detect.Status) *flagsModel {
 	m := &flagsModel{app: a, st: st, flags: st.Provider.Flags}
 	m.on = make([]bool, len(m.flags))
+
+	// Priority for pre-check: state.PreferredFlags > config DefaultFlags > flag.Default.
+	saved, hasSaved := a.state.PreferredFlagsFor(st.Provider.ID)
 	for i, f := range m.flags {
-		m.on[i] = f.Default
-		// If the flag is already in default_flags from config, pre-toggle on.
-		for _, df := range st.Provider.DefaultFlags {
-			if df == f.Flag {
-				m.on[i] = true
+		switch {
+		case hasSaved:
+			m.on[i] = containsStr(saved, f.Flag)
+		default:
+			m.on[i] = f.Default
+			for _, df := range st.Provider.DefaultFlags {
+				if df == f.Flag {
+					m.on[i] = true
+				}
 			}
 		}
 	}
 	return m
+}
+
+func containsStr(ss []string, s string) bool {
+	for _, x := range ss {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *flagsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -54,11 +70,12 @@ func (m *flagsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					extra = append(extra, f.Flag)
 				}
 			}
-			// Don't double-apply DefaultFlags; app.launch merges.
-			// Replace DefaultFlags semantics with explicit flags from this screen.
-			// We pass the user-toggled set; app.launch will dedupe.
+			// Persist this choice as the provider's preferred flag set.
+			m.app.state.SetPreferredFlags(m.st.Provider.ID, extra)
+			_ = m.app.state.Save()
+			// The toggled set is the source of truth; suppress DefaultFlags merge.
 			st := *m.st
-			st.Provider.DefaultFlags = nil // suppress duplicate apply
+			st.Provider.DefaultFlags = nil
 			return m.app, m.app.launch(&st, extra)
 		case "esc":
 			m.app.screen = screenProvider

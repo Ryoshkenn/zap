@@ -16,11 +16,32 @@ const (
 	stateDirSubpath = "zap"
 )
 
-// State is the persisted favorites + recents.
+// State is the persisted favorites + recents + per-provider preferences.
 type State struct {
-	FavoriteFolders   []string       `json:"favorite_folders"`
-	FavoriteProviders []string       `json:"favorite_providers"`
-	RecentFolders     []RecentFolder `json:"recent_folders"`
+	FavoriteFolders   []string            `json:"favorite_folders"`
+	FavoriteProviders []string            `json:"favorite_providers"`
+	RecentFolders     []RecentFolder      `json:"recent_folders"`
+	PreferredFlags    map[string][]string `json:"preferred_flags,omitempty"`
+}
+
+// SetPreferredFlags stores the user's chosen flag set for a provider.
+// Pass an empty slice to clear (still records that the user explicitly chose "none").
+func (s *State) SetPreferredFlags(providerID string, flags []string) {
+	if s.PreferredFlags == nil {
+		s.PreferredFlags = map[string][]string{}
+	}
+	clone := make([]string, len(flags))
+	copy(clone, flags)
+	s.PreferredFlags[providerID] = clone
+}
+
+// PreferredFlagsFor returns the saved flag set and whether one was recorded.
+func (s *State) PreferredFlagsFor(providerID string) ([]string, bool) {
+	if s.PreferredFlags == nil {
+		return nil, false
+	}
+	v, ok := s.PreferredFlags[providerID]
+	return v, ok
 }
 
 // RecentFolder is a folder path with a last-used timestamp.

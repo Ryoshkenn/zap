@@ -33,10 +33,10 @@ func newProviderCmd(p config.Provider) *cobra.Command {
 				return err
 			}
 
-			flags := resolveFlags(p, yolo, safe)
+			s, _ := state.Load()
+			flags := resolveFlags(p, s, yolo, safe)
 
-			s, err := state.Load()
-			if err == nil {
+			if s != nil {
 				s.TouchRecent(dir)
 				_ = s.Save()
 			}
@@ -77,18 +77,24 @@ func resolveDir(args []string) (string, error) {
 	return abs, nil
 }
 
-// resolveFlags merges provider defaults with --yolo/--safe overrides.
-// --safe wins over --yolo if both somehow set.
-func resolveFlags(p config.Provider, yolo, safe bool) []string {
-	out := append([]string(nil), p.DefaultFlags...)
-	yoloFlag := findYoloFlag(p)
+// resolveFlags layers config defaults, saved preferences, and CLI overrides.
+// Priority (highest wins): --safe / --yolo > state.PreferredFlags > p.DefaultFlags.
+func resolveFlags(p config.Provider, s *state.State, yolo, safe bool) []string {
+	var out []string
+	if s != nil {
+		if saved, ok := s.PreferredFlagsFor(p.ID); ok {
+			out = append(out, saved...)
+		}
+	}
+	if out == nil {
+		out = append([]string(nil), p.DefaultFlags...)
+	}
 
+	yoloFlag := findYoloFlag(p)
 	if safe && yoloFlag != "" {
 		out = removeAll(out, yoloFlag)
-	} else if yolo && yoloFlag != "" {
-		if !contains(out, yoloFlag) {
-			out = append(out, yoloFlag)
-		}
+	} else if yolo && yoloFlag != "" && !contains(out, yoloFlag) {
+		out = append(out, yoloFlag)
 	}
 	return out
 }

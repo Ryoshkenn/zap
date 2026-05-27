@@ -62,6 +62,7 @@ func buildFolderItems(s *state.State) []list.Item {
 	}
 	items = append(items, folderItem{label: "📁 Current: " + abbrev(cwd), path: cwd, section: "current"})
 	items = append(items, folderItem{label: "➜  Browse folders…", path: "", section: "browse"})
+	items = append(items, folderItem{label: "⚙  Settings…", path: "", section: "settings"})
 	return items
 }
 
@@ -76,13 +77,18 @@ func (m *folderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !ok {
 				return m.app, nil
 			}
-			if sel.section == "browse" {
+			switch sel.section {
+			case "browse":
 				return m.app, m.app.gotoBrowse()
+			case "settings":
+				return m.app, m.app.gotoSettings()
 			}
 			return m.app, m.app.gotoProvider(sel.path)
+		case "i":
+			return m.app, m.app.gotoSettings()
 		case "f":
 			sel, ok := m.list.SelectedItem().(folderItem)
-			if ok && sel.path != "" && sel.section != "browse" {
+			if ok && sel.path != "" && sel.section != "browse" && sel.section != "settings" {
 				if m.app.state.IsFavoriteFolder(sel.path) {
 					m.app.state.RemoveFavoriteFolder(sel.path)
 				} else {
@@ -100,7 +106,7 @@ func (m *folderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *folderModel) View() string {
-	help := helpStyle.Render("↑/↓ move · enter select · / filter · f star/unstar · q quit")
+	help := helpStyle.Render("↑/↓ move · enter select · / filter · f star/unstar · i settings · q quit")
 	return lipgloss.JoinVertical(lipgloss.Left, m.list.View(), help)
 }
 
@@ -171,17 +177,27 @@ func (m *browseModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 				m.refresh()
 			}
-		case "right", "l":
+		case "enter", "right", "l":
+			// Descend into highlighted subdirectory.
 			if len(m.entries) > 0 {
 				m.cwd = m.cwd + string(os.PathSeparator) + m.entries[m.cursor].Name()
 				m.cursor = 0
 				m.refresh()
 			}
-		case "enter":
-			// Pick this directory (cwd).
+		case " ":
+			// Pick the directory we're currently viewing.
 			return m.app, m.app.gotoProvider(m.cwd)
+		case "f":
+			// Toggle favorite on the directory we're currently viewing.
+			if m.app.state.IsFavoriteFolder(m.cwd) {
+				m.app.state.RemoveFavoriteFolder(m.cwd)
+			} else {
+				m.app.state.AddFavoriteFolder(m.cwd)
+			}
+			_ = m.app.state.Save()
 		case "esc":
 			m.app.screen = screenFolder
+			m.app.folder = newFolderModel(m.app)
 			return m.app, nil
 		}
 	}
@@ -190,7 +206,11 @@ func (m *browseModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *browseModel) View() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Browse — " + abbrev(m.cwd)))
+	star := ""
+	if m.app.state.IsFavoriteFolder(m.cwd) {
+		star = starStyle.Render(" ⭐")
+	}
+	b.WriteString(titleStyle.Render("Browse — " + abbrev(m.cwd) + star))
 	b.WriteString("\n\n")
 	if m.err != nil {
 		b.WriteString(errorStyle.Render(m.err.Error()) + "\n")
@@ -208,7 +228,7 @@ func (m *browseModel) View() string {
 		fmt.Fprintf(&b, "%s%s/\n", marker, name)
 	}
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("↑/↓ move · →/l enter dir · ←/h up · enter pick this dir · esc back"))
+	b.WriteString(helpStyle.Render("↑/↓ move · enter/→ descend · ←/h up · space pick this dir · f favorite · esc back"))
 	return b.String()
 }
 

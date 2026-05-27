@@ -19,6 +19,7 @@ const (
 	screenBrowse
 	screenProvider
 	screenFlags
+	screenSettings
 )
 
 type app struct {
@@ -27,10 +28,11 @@ type app struct {
 	statuses []detect.Status
 	state    *state.State
 
-	folder      *folderModel
-	browse      *browseModel
-	provider    *providerModel
-	flagsModel  *flagsModel
+	folder     *folderModel
+	browse     *browseModel
+	provider   *providerModel
+	flagsModel *flagsModel
+	settings   *settingsModel
 
 	chosenFolder   string
 	chosenProvider *detect.Status
@@ -111,6 +113,8 @@ func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.provider.Update(msg)
 	case screenFlags:
 		return a.flagsModel.Update(msg)
+	case screenSettings:
+		return a.settings.Update(msg)
 	}
 	return a, nil
 }
@@ -125,8 +129,16 @@ func (a *app) View() string {
 		return a.provider.View()
 	case screenFlags:
 		return a.flagsModel.View()
+	case screenSettings:
+		return a.settings.View()
 	}
 	return ""
+}
+
+func (a *app) gotoSettings() tea.Cmd {
+	a.settings = newSettingsModel(a)
+	a.screen = screenSettings
+	return nil
 }
 
 // transitions
