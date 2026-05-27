@@ -1,0 +1,74 @@
+version: 2
+
+project_name: zap
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: zap
+    main: ./cmd/zap
+    binary: zap
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: default
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_
+      {{- if eq .Os "darwin" }}macos
+      {{- else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "arm64" }}arm64
+      {{- else }}{{ .Arch }}{{ end }}
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+
+brews:
+  - name: zap
+    repository:
+      owner: Ryoshkenn
+      name: homebrew-zap
+    homepage: https://github.com/Ryoshkenn/zap
+    description: Terminal launcher for AI coding CLIs
+    license: MIT
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    test: |
+      system "#{bin}/zap --version"
+
+scoops:
+  - name: zap
+    repository:
+      owner: Ryoshkenn
+      name: scoop-zap
+    homepage: https://github.com/Ryoshkenn/zap
+    description: Terminal launcher for AI coding CLIs
+    license: MIT
