@@ -31,6 +31,9 @@ func (i providerItem) Title() string {
 
 func (i providerItem) Description() string {
 	if i.st.Installed {
+		if i.st.AppBundlePath != "" {
+			return mutedStyle.Render(i.st.AppBundlePath)
+		}
 		return mutedStyle.Render(i.st.Path)
 	}
 	if i.st.Provider.InstallHint != "" {

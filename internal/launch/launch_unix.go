@@ -27,3 +27,22 @@ func Exec(dir, command string, args []string, env []string) error {
 	}
 	return syscall.Exec(binPath, argv, env)
 }
+
+// Open launches a GUI app for dir, then returns immediately (fire-and-forget).
+// If appBundlePath is set (e.g. /Applications/Cursor.app), macOS `open -a` is
+// used so the app gets the folder as its project root. Otherwise the CLI binary
+// is called with dir as the first argument.
+func Open(dir, command string, args []string, appBundlePath string) error {
+	if appBundlePath != "" {
+		all := append([]string{"-a", appBundlePath, dir}, args...)
+		cmd := exec.Command("open", all...)
+		return cmd.Start()
+	}
+	binPath, err := exec.LookPath(command)
+	if err != nil {
+		return fmt.Errorf("%s: not found on PATH", command)
+	}
+	all := append([]string{dir}, args...)
+	cmd := exec.Command(binPath, all...)
+	return cmd.Start()
+}

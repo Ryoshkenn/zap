@@ -22,6 +22,24 @@ type State struct {
 	FavoriteProviders []string            `json:"favorite_providers"`
 	RecentFolders     []RecentFolder      `json:"recent_folders"`
 	PreferredFlags    map[string][]string `json:"preferred_flags,omitempty"`
+	LaunchModes       map[string]string   `json:"launch_modes,omitempty"`
+}
+
+// SetLaunchMode persists the launch mode ("terminal" or "app") for a provider.
+func (s *State) SetLaunchMode(providerID, mode string) {
+	if s.LaunchModes == nil {
+		s.LaunchModes = map[string]string{}
+	}
+	s.LaunchModes[providerID] = mode
+}
+
+// LaunchModeFor returns the saved launch mode and whether one was recorded.
+func (s *State) LaunchModeFor(providerID string) (string, bool) {
+	if s.LaunchModes == nil {
+		return "", false
+	}
+	v, ok := s.LaunchModes[providerID]
+	return v, ok
 }
 
 // SetPreferredFlags stores the user's chosen flag set for a provider.

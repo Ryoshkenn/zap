@@ -9,6 +9,12 @@ type Provider struct {
 	InstallHint  string   `yaml:"install_hint,omitempty"`
 	Flags        []Flag   `yaml:"flags,omitempty"`
 	DefaultFlags []string `yaml:"default_flags,omitempty"`
+	// LaunchMode controls how the provider is started: "terminal" (default) replaces
+	// the zap process via exec; "app" fires-and-forgets so a GUI window opens.
+	LaunchMode string `yaml:"launch_mode,omitempty"`
+	// AppBundle is the macOS .app name (without the .app suffix) used to detect
+	// installation via /Applications and to open the app via `open -a`.
+	AppBundle string `yaml:"app_bundle,omitempty"`
 }
 
 // Flag is a togglable command-line flag exposed in the interactive picker.
@@ -33,6 +39,7 @@ type UserConfig struct {
 // ProviderOverride overrides a built-in provider's settings.
 type ProviderOverride struct {
 	DefaultFlags []string `yaml:"default_flags,omitempty"`
+	LaunchMode   string   `yaml:"launch_mode,omitempty"`
 }
 
 // Config is the resolved view used at runtime (embedded defaults ⊕ user overrides).

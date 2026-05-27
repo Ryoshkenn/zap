@@ -17,13 +17,14 @@ type settingsModel struct {
 	dirty  bool
 }
 
-// settingsRow is one togglable flag (or a provider header row).
+// settingsRow is one togglable flag (or a provider header row, or a launch mode toggle).
 type settingsRow struct {
-	isHeader   bool
-	providerID string
-	flag       config.Flag
-	on         bool
-	label      string
+	isHeader     bool
+	isLaunchMode bool
+	providerID   string
+	flag         config.Flag
+	on           bool
+	label        string
 }
 
 func newSettingsModel(a *app) *settingsModel {
@@ -39,13 +40,23 @@ func (m *settingsModel) rebuild() {
 			isHeader: true,
 			label:    p.Icon + " " + p.Name + "  " + mutedStyle.Render("("+p.ID+")"),
 		})
-		if len(p.Flags) == 0 {
-			m.rows = append(m.rows, settingsRow{
-				isHeader: true,
-				label:    mutedStyle.Render("  (no togglable flags)"),
-			})
-			continue
+
+		// Launch mode toggle — always shown so users can override the default.
+		defaultMode := p.LaunchMode
+		if defaultMode == "" {
+			defaultMode = "terminal"
 		}
+		modeOn := defaultMode == "app"
+		if saved, ok := m.app.state.LaunchModeFor(p.ID); ok {
+			modeOn = saved == "app"
+		}
+		m.rows = append(m.rows, settingsRow{
+			isLaunchMode: true,
+			providerID:   p.ID,
+			on:           modeOn,
+			label:        "Open as app  " + mutedStyle.Render("(default: "+defaultMode+")"),
+		})
+
 		saved, hasSaved := m.app.state.PreferredFlagsFor(p.ID)
 		for _, f := range p.Flags {
 			on := f.Default
@@ -83,6 +94,10 @@ func (m *settingsModel) advance(dir int) {
 	}
 }
 
+func (m *settingsModel) isInteractive(r settingsRow) bool {
+	return !r.isHeader
+}
+
 func (m *settingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if km, ok := msg.(tea.KeyMsg); ok {
 		switch km.String() {
@@ -108,16 +123,22 @@ func (m *settingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *settingsModel) persistRow(r *settingsRow) {
-	saved, _ := m.app.state.PreferredFlagsFor(r.providerID)
-	// Collect current state of all rows for this provider so we save the
-	// complete picture (so default_flags from config can be overridden).
+	if r.isLaunchMode {
+		mode := "terminal"
+		if r.on {
+			mode = "app"
+		}
+		m.app.state.SetLaunchMode(r.providerID, mode)
+		_ = m.app.state.Save()
+		return
+	}
+	// Collect current state of all flag rows for this provider.
 	current := []string{}
 	for _, row := range m.rows {
-		if row.providerID == r.providerID && row.on {
+		if row.providerID == r.providerID && !row.isLaunchMode && row.on {
 			current = append(current, row.flag.Flag)
 		}
 	}
-	_ = saved
 	m.app.state.SetPreferredFlags(r.providerID, current)
 	_ = m.app.state.Save()
 }

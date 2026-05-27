@@ -1,6 +1,7 @@
 package detect
 
 import (
+	"os"
 	"os/exec"
 
 	"github.com/Ryoshkenn/zap/internal/config"
@@ -8,9 +9,10 @@ import (
 
 // Status describes whether a provider's command is available on PATH.
 type Status struct {
-	Provider  config.Provider
-	Installed bool
-	Path      string
+	Provider    config.Provider
+	Installed   bool
+	Path        string // CLI binary path, or /Applications/<bundle>.app path
+	AppBundlePath string // set when detected via /Applications on macOS
 }
 
 // Detect reports installation status for every provider in cfg.
@@ -21,6 +23,14 @@ func Detect(cfg *config.Config) []Status {
 		if path, err := exec.LookPath(p.Command); err == nil {
 			st.Installed = true
 			st.Path = path
+		} else if p.AppBundle != "" {
+			// Fall back to checking /Applications/<bundle>.app on macOS.
+			appPath := "/Applications/" + p.AppBundle + ".app"
+			if _, err := os.Stat(appPath); err == nil {
+				st.Installed = true
+				st.Path = appPath
+				st.AppBundlePath = appPath
+			}
 		}
 		out = append(out, st)
 	}

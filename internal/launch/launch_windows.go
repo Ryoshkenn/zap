@@ -8,6 +8,18 @@ import (
 	"os/exec"
 )
 
+// Open launches command as a detached GUI app, passing dir as the first argument.
+// appBundlePath is ignored on Windows (macOS-only concept).
+func Open(dir, command string, args []string, appBundlePath string) error {
+	binPath, err := exec.LookPath(command)
+	if err != nil {
+		return fmt.Errorf("%s: not found on PATH", command)
+	}
+	all := append([]string{dir}, args...)
+	cmd := exec.Command(binPath, all...)
+	return cmd.Start()
+}
+
 // Exec runs command + args in dir, forwarding stdio. zap remains as parent.
 // On Windows there's no true exec; we wait for completion and forward the exit code.
 func Exec(dir, command string, args []string, env []string) error {

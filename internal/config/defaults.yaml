@@ -16,7 +16,7 @@ providers:
     install_hint: "npm install -g @openai/codex"
     flags:
       - id: yolo
-        label: "Dangerously bypass approvals & sandbox"
+        label: "YOLO mode (dangerously bypass approvals & sandbox)"
         flag: "--dangerously-bypass-approvals-and-sandbox"
         default: false
       - id: full_auto
@@ -43,3 +43,24 @@ providers:
         label: "Dangerously skip permissions"
         flag: "--dangerously-skip-permissions"
         default: false
+  - id: cursor
+    name: Cursor
+    command: cursor
+    icon: "🖱️"
+    launch_mode: app
+    app_bundle: "Cursor"
+    install_hint: "Download from https://cursor.com"
+  - id: windsurf
+    name: Windsurf
+    command: windsurf
+    icon: "🏄"
+    launch_mode: app
+    app_bundle: "Windsurf"
+    install_hint: "Download from https://windsurf.com"
+  - id: vscode
+    name: VS Code
+    command: code
+    icon: "💻"
+    launch_mode: app
+    app_bundle: "Visual Studio Code"
+    install_hint: "Download from https://code.visualstudio.com"

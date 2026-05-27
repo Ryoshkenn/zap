@@ -44,9 +44,11 @@ type app struct {
 }
 
 type launchResult struct {
-	Folder  string
-	Command string
-	Args    []string
+	Folder        string
+	Command       string
+	Args          []string
+	LaunchMode    string // "terminal" or "app"
+	AppBundlePath string // macOS: /Applications/<bundle>.app, triggers `open -a`
 }
 
 // Run launches the interactive TUI. On selection, the chosen provider is exec'd
@@ -87,6 +89,9 @@ func Run() error {
 	final.state.TouchRecent(final.finalLaunch.Folder)
 	_ = final.state.Save()
 
+	if final.finalLaunch.LaunchMode == "app" {
+		return launch.Open(final.finalLaunch.Folder, final.finalLaunch.Command, final.finalLaunch.Args, final.finalLaunch.AppBundlePath)
+	}
 	return launch.Exec(final.finalLaunch.Folder, final.finalLaunch.Command, final.finalLaunch.Args, os.Environ())
 }
 
@@ -180,10 +185,21 @@ func (a *app) launch(st *detect.Status, extraFlags []string) tea.Cmd {
 			args = append(args, f)
 		}
 	}
+
+	mode := st.Provider.LaunchMode
+	if mode == "" {
+		mode = "terminal"
+	}
+	if saved, ok := a.state.LaunchModeFor(st.Provider.ID); ok {
+		mode = saved
+	}
+
 	a.finalLaunch = &launchResult{
-		Folder:  a.chosenFolder,
-		Command: st.Provider.Command,
-		Args:    args,
+		Folder:        a.chosenFolder,
+		Command:       st.Provider.Command,
+		Args:          args,
+		LaunchMode:    mode,
+		AppBundlePath: st.AppBundlePath,
 	}
 	return tea.Quit
 }

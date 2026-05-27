@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -23,6 +24,36 @@ func (i folderItem) Title() string       { return i.label }
 func (i folderItem) Description() string { return i.path }
 func (i folderItem) FilterValue() string { return i.label + " " + i.path }
 
+// separatorItem renders as a horizontal rule between sections.
+type separatorItem struct{}
+
+func (separatorItem) Title() string       { return "" }
+func (separatorItem) Description() string { return "" }
+func (separatorItem) FilterValue() string { return "" }
+
+// folderDelegate wraps DefaultDelegate and renders separatorItems as horizontal rules.
+type folderDelegate struct {
+	base list.DefaultDelegate
+}
+
+func (d folderDelegate) Height() int  { return d.base.Height() }
+func (d folderDelegate) Spacing() int { return d.base.Spacing() }
+func (d folderDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
+	return d.base.Update(msg, m)
+}
+func (d folderDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	if _, ok := item.(separatorItem); ok {
+		width := m.Width()
+		if width <= 6 {
+			width = 40
+		}
+		line := strings.Repeat("─", width-6)
+		fmt.Fprintf(w, "  %s\n", mutedStyle.Render(line))
+		return
+	}
+	d.base.Render(w, m, index, item)
+}
+
 type folderModel struct {
 	app  *app
 	list list.Model
@@ -31,11 +62,11 @@ type folderModel struct {
 func newFolderModel(a *app) *folderModel {
 	items := buildFolderItems(a.state)
 
-	delegate := list.NewDefaultDelegate()
-	delegate.SetSpacing(0)
-	delegate.ShowDescription = true
+	base := list.NewDefaultDelegate()
+	base.SetSpacing(0)
+	base.ShowDescription = true
 
-	l := list.New(items, delegate, 80, 22)
+	l := list.New(items, folderDelegate{base: base}, 80, 22)
 	l.Title = "Pick a folder"
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(true)
@@ -48,22 +79,52 @@ func buildFolderItems(s *state.State) []list.Item {
 	cwd, _ := os.Getwd()
 	items := []list.Item{}
 
-	if len(s.FavoriteFolders) > 0 {
+	hasFavorites := len(s.FavoriteFolders) > 0
+	if hasFavorites {
 		for _, f := range s.FavoriteFolders {
 			items = append(items, folderItem{label: "⭐ " + abbrev(f), path: f, section: "starred"})
 		}
 	}
+
+	var recentItems []list.Item
 	for _, r := range s.RecentsSorted(4) {
 		// Don't double-list starred folders.
 		if s.IsFavoriteFolder(r.Path) {
 			continue
 		}
-		items = append(items, folderItem{label: "🕘 " + abbrev(r.Path), path: r.Path, section: "recent"})
+		recentItems = append(recentItems, folderItem{label: "🕘 " + abbrev(r.Path), path: r.Path, section: "recent"})
 	}
+
+	if len(recentItems) > 0 {
+		if hasFavorites {
+			items = append(items, separatorItem{})
+		}
+		items = append(items, recentItems...)
+		items = append(items, separatorItem{})
+	} else if hasFavorites {
+		items = append(items, separatorItem{})
+	}
+
 	items = append(items, folderItem{label: "📁 Current: " + abbrev(cwd), path: cwd, section: "current"})
 	items = append(items, folderItem{label: "➜  Browse folders…", path: "", section: "browse"})
 	items = append(items, folderItem{label: "⚙  Settings…", path: "", section: "settings"})
 	return items
+}
+
+func (m *folderModel) skipSep(from, dir int) {
+	items := m.list.Items()
+	idx := from
+	for {
+		next := idx + dir
+		if next < 0 || next >= len(items) {
+			break
+		}
+		idx = next
+		if _, isSep := items[idx].(separatorItem); !isSep {
+			m.list.Select(idx)
+			break
+		}
+	}
 }
 
 func (m *folderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -71,6 +132,17 @@ func (m *folderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.list.SetSize(msg.Width-2, msg.Height-4)
 	case tea.KeyMsg:
+		// Intercept up/down when not filtering so the cursor skips separator rows.
+		if m.list.FilterState() != list.Filtering {
+			switch msg.String() {
+			case "up", "k":
+				m.skipSep(m.list.Index(), -1)
+				return m.app, nil
+			case "down", "j":
+				m.skipSep(m.list.Index(), 1)
+				return m.app, nil
+			}
+		}
 		switch msg.String() {
 		case "enter":
 			sel, ok := m.list.SelectedItem().(folderItem)

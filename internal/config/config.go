@@ -75,6 +75,9 @@ func merge(defaults []Provider, user *UserConfig) *Config {
 					if override.DefaultFlags != nil {
 						providers[i].DefaultFlags = override.DefaultFlags
 					}
+					if override.LaunchMode != "" {
+						providers[i].LaunchMode = override.LaunchMode
+					}
 				}
 			}
 		}
