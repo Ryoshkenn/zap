@@ -15,6 +15,9 @@ type Provider struct {
 	// AppBundle is the macOS .app name (without the .app suffix) used to detect
 	// installation via /Applications and to open the app via `open -a`.
 	AppBundle string `yaml:"app_bundle,omitempty"`
+	// ModelSelector indicates the provider requires a model to be chosen before
+	// launch (e.g. Ollama). The model name is passed as an arg at run time.
+	ModelSelector bool `yaml:"model_selector,omitempty"`
 }
 
 // Flag is a togglable command-line flag exposed in the interactive picker.

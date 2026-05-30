@@ -9,8 +9,10 @@ import (
 )
 
 type providerItem struct {
-	st       detect.Status
-	starred  bool
+	st            detect.Status
+	starred       bool
+	modelSelector bool
+	defaultModel  string
 }
 
 func (i providerItem) Title() string {
@@ -31,6 +33,12 @@ func (i providerItem) Title() string {
 
 func (i providerItem) Description() string {
 	if i.st.Installed {
+		if i.modelSelector {
+			if i.defaultModel != "" {
+				return mutedStyle.Render("model: ") + highlightStyle.Render(i.defaultModel)
+			}
+			return mutedStyle.Render("no default model — press enter to choose")
+		}
 		if i.st.AppBundlePath != "" {
 			return mutedStyle.Render(i.st.AppBundlePath)
 		}
@@ -66,6 +74,10 @@ func buildProviderItems(a *app) []list.Item {
 	missing := []list.Item{}
 	for _, st := range a.statuses {
 		item := providerItem{st: st, starred: a.state.IsFavoriteProvider(st.Provider.ID)}
+		if st.Provider.ModelSelector && st.Installed {
+			item.modelSelector = true
+			item.defaultModel, _ = a.state.PreferredModelFor(st.Provider.ID)
+		}
 		switch {
 		case item.starred:
 			starred = append(starred, item)

@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/Ryoshkenn/zap/internal/config"
+	"github.com/Ryoshkenn/zap/internal/detect"
 )
 
 // settingsModel lets the user view and toggle per-provider default flags.
@@ -17,14 +18,15 @@ type settingsModel struct {
 	dirty  bool
 }
 
-// settingsRow is one togglable flag (or a provider header row, or a launch mode toggle).
+// settingsRow is one togglable flag (or a provider header row, launch mode toggle, or model selector).
 type settingsRow struct {
-	isHeader     bool
-	isLaunchMode bool
-	providerID   string
-	flag         config.Flag
-	on           bool
-	label        string
+	isHeader      bool
+	isLaunchMode  bool
+	isModelSelect bool
+	providerID    string
+	flag          config.Flag
+	on            bool
+	label         string
 }
 
 func newSettingsModel(a *app) *settingsModel {
@@ -56,6 +58,18 @@ func (m *settingsModel) rebuild() {
 			on:           modeOn,
 			label:        "Open as app  " + mutedStyle.Render("(default: "+defaultMode+")"),
 		})
+
+		if p.ModelSelector {
+			modelLabel := mutedStyle.Render("(none selected)")
+			if model, ok := m.app.state.PreferredModelFor(p.ID); ok {
+				modelLabel = highlightStyle.Render(model)
+			}
+			m.rows = append(m.rows, settingsRow{
+				isModelSelect: true,
+				providerID:    p.ID,
+				label:         "Default model  " + modelLabel,
+			})
+		}
 
 		saved, hasSaved := m.app.state.PreferredFlagsFor(p.ID)
 		for _, f := range p.Flags {
@@ -110,6 +124,14 @@ func (m *settingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if r.isHeader {
 				return m.app, nil
 			}
+			if r.isModelSelect {
+				st := m.app.cfg.FindProvider(r.providerID)
+				if st == nil {
+					return m.app, nil
+				}
+				fakeStatus := &detect.Status{Provider: *st}
+				return m.app, m.app.gotoModelPicker(fakeStatus, screenSettings)
+			}
 			r.on = !r.on
 			m.persistRow(r)
 			m.dirty = true
@@ -154,13 +176,17 @@ func (m *settingsModel) View() string {
 			b.WriteString("  " + r.label + "\n")
 			continue
 		}
-		check := "[ ]"
-		if r.on {
-			check = highlightStyle.Render("[x]")
-		}
 		marker := "    "
 		if i == m.cursor {
 			marker = "  " + highlightStyle.Render("▸ ")
+		}
+		if r.isModelSelect {
+			b.WriteString(marker + highlightStyle.Render("[→]") + " " + r.label + "\n")
+			continue
+		}
+		check := "[ ]"
+		if r.on {
+			check = highlightStyle.Render("[x]")
 		}
 		b.WriteString(marker + check + " " + r.label + "\n")
 	}

@@ -40,6 +40,31 @@ func newProviderCmd(p config.Provider) *cobra.Command {
 			}
 
 			s, _ := state.Load()
+
+			// Model-selector providers (e.g. Ollama) require a chosen model.
+			// Mirror the interactive flow: launch with ["run", <model>] and
+			// skip DefaultFlags (Ollama has none, and the interactive path
+			// clears them too). Fail clearly if no default has been saved.
+			if p.ModelSelector {
+				var model string
+				if s != nil {
+					model, _ = s.PreferredModelFor(p.ID)
+				}
+				if model == "" {
+					return fmt.Errorf(
+						"%s requires a model to launch.\n"+
+							"No default model is saved yet.\n"+
+							"Run `zap` interactively, select %s, and choose a default model first.",
+						p.Name, p.Name,
+					)
+				}
+				if s != nil {
+					s.TouchRecent(dir)
+					_ = s.Save()
+				}
+				return launchProvider(dir, st, []string{"run", model}, s)
+			}
+
 			flags := resolveFlags(p, s, yolo, safe)
 
 			if s != nil {

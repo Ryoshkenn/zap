@@ -64,3 +64,9 @@ providers:
     launch_mode: app
     app_bundle: "Visual Studio Code"
     install_hint: "Download from https://code.visualstudio.com"
+  - id: ollama
+    name: Ollama
+    command: ollama
+    icon: "🦙"
+    install_hint: "Download from https://ollama.com"
+    model_selector: true

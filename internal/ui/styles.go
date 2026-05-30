@@ -27,4 +27,13 @@ var (
 
 	errorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FF6B6B"))
+
+	// hintStyle is for secondary info (download hints, sizes) — dim but readable.
+	hintStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("244"))
+
+	// sectionStyle is for section headers in lists.
+	sectionStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("252")).
+			Bold(true)
 )

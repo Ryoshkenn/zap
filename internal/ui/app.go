@@ -20,6 +20,7 @@ const (
 	screenProvider
 	screenFlags
 	screenSettings
+	screenModelPicker
 )
 
 type app struct {
@@ -28,11 +29,12 @@ type app struct {
 	statuses []detect.Status
 	state    *state.State
 
-	folder     *folderModel
-	browse     *browseModel
-	provider   *providerModel
-	flagsModel *flagsModel
-	settings   *settingsModel
+	folder      *folderModel
+	browse      *browseModel
+	provider    *providerModel
+	flagsModel  *flagsModel
+	settings    *settingsModel
+	modelPicker *modelPickerModel
 
 	chosenFolder   string
 	chosenProvider *detect.Status
@@ -104,7 +106,7 @@ func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.width, a.height = wm.Width, wm.Height
 	}
 	if km, ok := msg.(tea.KeyMsg); ok {
-		if km.String() == "ctrl+c" || km.String() == "q" && a.screen != screenBrowse {
+		if km.String() == "ctrl+c" || (km.String() == "q" && a.screen != screenBrowse && a.screen != screenModelPicker) {
 			return a, tea.Quit
 		}
 	}
@@ -120,6 +122,8 @@ func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.flagsModel.Update(msg)
 	case screenSettings:
 		return a.settings.Update(msg)
+	case screenModelPicker:
+		return a.modelPicker.Update(msg)
 	}
 	return a, nil
 }
@@ -136,6 +140,8 @@ func (a *app) View() string {
 		return a.flagsModel.View()
 	case screenSettings:
 		return a.settings.View()
+	case screenModelPicker:
+		return a.modelPicker.View()
 	}
 	return ""
 }
@@ -163,12 +169,51 @@ func (a *app) gotoBrowse() tea.Cmd {
 
 func (a *app) gotoFlags(st *detect.Status) tea.Cmd {
 	a.chosenProvider = st
-	if len(st.Provider.Flags) == 0 && len(st.Provider.DefaultFlags) == 0 {
-		return a.launch(st, nil)
+	if st.Provider.ModelSelector {
+		return a.gotoModelPicker(st, screenProvider)
 	}
-	a.flagsModel = newFlagsModel(a, st)
-	a.screen = screenFlags
-	return nil
+	// Apply saved preferred flags if present, otherwise use defaults — skip the
+	// flags picker screen entirely (flags are configurable in Settings).
+	var extra []string
+	if saved, ok := a.state.PreferredFlagsFor(st.Provider.ID); ok {
+		extra = saved
+	} else {
+		for _, f := range st.Provider.Flags {
+			flag := f.Flag
+			on := f.Default
+			for _, df := range st.Provider.DefaultFlags {
+				if df == flag {
+					on = true
+				}
+			}
+			if on {
+				extra = append(extra, flag)
+			}
+		}
+	}
+	copy := *st
+	copy.Provider.DefaultFlags = nil
+	return a.launch(&copy, extra)
+}
+
+func (a *app) gotoModelPicker(st *detect.Status, returnTo screen) tea.Cmd {
+	a.chosenProvider = st
+	onSelect := func(model string) tea.Cmd {
+		a.state.SetPreferredModel(st.Provider.ID, model)
+		_ = a.state.Save()
+		if returnTo == screenSettings {
+			a.settings.rebuild()
+			a.screen = screenSettings
+			return nil
+		}
+		// Launch flow: pass "run" + model as args.
+		copy := *st
+		copy.Provider.DefaultFlags = nil
+		return a.launch(&copy, []string{"run", model})
+	}
+	a.modelPicker = newModelPickerModel(a, st.Provider.ID, onSelect, returnTo, returnTo == screenSettings)
+	a.screen = screenModelPicker
+	return a.modelPicker.Init()
 }
 
 func (a *app) launch(st *detect.Status, extraFlags []string) tea.Cmd {

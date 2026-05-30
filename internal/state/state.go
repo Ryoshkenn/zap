@@ -23,6 +23,7 @@ type State struct {
 	RecentFolders     []RecentFolder      `json:"recent_folders"`
 	PreferredFlags    map[string][]string `json:"preferred_flags,omitempty"`
 	LaunchModes       map[string]string   `json:"launch_modes,omitempty"`
+	PreferredModels   map[string]string   `json:"preferred_models,omitempty"`
 }
 
 // SetLaunchMode persists the launch mode ("terminal" or "app") for a provider.
@@ -51,6 +52,23 @@ func (s *State) SetPreferredFlags(providerID string, flags []string) {
 	clone := make([]string, len(flags))
 	copy(clone, flags)
 	s.PreferredFlags[providerID] = clone
+}
+
+// SetPreferredModel stores the user's chosen model for a provider.
+func (s *State) SetPreferredModel(providerID, model string) {
+	if s.PreferredModels == nil {
+		s.PreferredModels = map[string]string{}
+	}
+	s.PreferredModels[providerID] = model
+}
+
+// PreferredModelFor returns the saved model and whether one was recorded.
+func (s *State) PreferredModelFor(providerID string) (string, bool) {
+	if s.PreferredModels == nil {
+		return "", false
+	}
+	v, ok := s.PreferredModels[providerID]
+	return v, ok
 }
 
 // PreferredFlagsFor returns the saved flag set and whether one was recorded.
