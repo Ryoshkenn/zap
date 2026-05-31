@@ -114,3 +114,64 @@ func TestStateDirUsesOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSSHHostCRUD(t *testing.T) {
+	s := &State{}
+	if !s.AddSSHHost(SSHHost{Target: "devbox", Alias: "dev"}) {
+		t.Fatal("first add should report new")
+	}
+	if s.AddSSHHost(SSHHost{Target: "devbox", Shell: "zsh"}) {
+		t.Error("re-adding same target should not report new")
+	}
+	h := s.FindSSHHost("devbox")
+	if h == nil || h.Alias != "dev" || h.Shell != "zsh" {
+		t.Errorf("merge failed: %+v", h)
+	}
+	if h.Label() != "dev" {
+		t.Errorf("Label should prefer alias, got %q", h.Label())
+	}
+	if (SSHHost{Target: "raw"}).Label() != "raw" {
+		t.Error("Label should fall back to target")
+	}
+	if !s.RemoveSSHHost("devbox") {
+		t.Error("remove should report removed")
+	}
+	if s.FindSSHHost("devbox") != nil {
+		t.Error("host should be gone")
+	}
+}
+
+func TestRemoteRecents(t *testing.T) {
+	s := &State{}
+	s.TouchRemote("devbox", "~/a")
+	s.TouchRemote("devbox", "~/b")
+	s.TouchRemote("other", "~/c")
+	s.TouchRemote("devbox", "~/a") // re-touch moves to front, dedups
+
+	got := s.RemoteRecents("devbox", 0)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 devbox recents, got %d: %+v", len(got), got)
+	}
+	if got[0].Path != "~/a" {
+		t.Errorf("expected ~/a most recent, got %q", got[0].Path)
+	}
+	if len(s.RemoteRecents("other", 0)) != 1 {
+		t.Error("other target should be untouched")
+	}
+}
+
+func TestLastLaunchRoundtrip(t *testing.T) {
+	withTempCache(t)
+	s := &State{}
+	s.SetLastLaunch(LastLaunch{ProviderID: "claude", Folder: "~/x", SSHTarget: "devbox", Flags: []string{"--yolo"}})
+	if err := s.Save(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LastLaunch == nil || got.LastLaunch.ProviderID != "claude" || got.LastLaunch.SSHTarget != "devbox" {
+		t.Errorf("last launch lost: %+v", got.LastLaunch)
+	}
+}

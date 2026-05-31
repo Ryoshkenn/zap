@@ -28,6 +28,19 @@ func Exec(dir, command string, args []string, env []string) error {
 	return syscall.Exec(binPath, argv, env)
 }
 
+// ExecSSH replaces the current process with an ssh session that runs command
+// in remoteDir on target. With an empty command it opens an interactive remote
+// shell. shell selects the remote login shell (default bash). Like Exec, zap
+// disappears and ssh owns the TTY.
+func ExecSSH(target, remoteDir, command string, args []string, shell string) error {
+	sshPath, err := exec.LookPath("ssh")
+	if err != nil {
+		return fmt.Errorf("ssh: not found on PATH")
+	}
+	argv := append([]string{sshPath}, SSHArgs(target, remoteDir, command, args, shell)...)
+	return syscall.Exec(sshPath, argv, os.Environ())
+}
+
 // Open launches a GUI app for dir, then returns immediately (fire-and-forget).
 // If appBundlePath is set (e.g. /Applications/Cursor.app), macOS `open -a` is
 // used so the app gets the folder as its project root. Otherwise the CLI binary

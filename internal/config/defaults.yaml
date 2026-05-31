@@ -35,14 +35,14 @@ providers:
         default: false
   - id: opencode
     name: opencode
-    command: opencode
+    command: opencode run
     icon: "📂"
     install_hint: "See https://github.com/sst/opencode"
     flags:
       - id: yolo
         label: "Dangerously skip permissions"
         flag: "--dangerously-skip-permissions"
-        default: false
+        default: true
   - id: cursor
     name: Cursor
     command: cursor

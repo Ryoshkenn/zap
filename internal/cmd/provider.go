@@ -18,9 +18,9 @@ var (
 	launchOpen = launch.Open
 )
 
-// newProviderCmd builds `zap <provider> [path] [--yolo|--safe]`.
+// newProviderCmd builds `zap <provider> [path] [--yolo|--safe] [--print]`.
 func newProviderCmd(p config.Provider) *cobra.Command {
-	var yolo, safe bool
+	var yolo, safe, printOnly bool
 	c := &cobra.Command{
 		Use:   p.ID + " [path]",
 		Short: fmt.Sprintf("Launch %s", p.Name),
@@ -58,20 +58,21 @@ func newProviderCmd(p config.Provider) *cobra.Command {
 						p.Name, p.Name,
 					)
 				}
-				if s != nil {
-					s.TouchRecent(dir)
-					_ = s.Save()
+				runArgs := []string{"run", model}
+				if printOnly {
+					return printLocal(dir, st.Provider.Command, runArgs)
 				}
-				return launchProvider(dir, st, []string{"run", model}, s)
+				recordLaunch(s, dir, p.ID, runArgs, model, st)
+				return launchProvider(dir, st, runArgs, s)
 			}
 
 			flags := resolveFlags(p, s, yolo, safe)
 
-			if s != nil {
-				s.TouchRecent(dir)
-				_ = s.Save()
+			if printOnly {
+				return printLocal(dir, st.Provider.Command, flags)
 			}
 
+			recordLaunch(s, dir, p.ID, flags, "", st)
 			return launchProvider(dir, st, flags, s)
 		},
 	}
@@ -79,7 +80,34 @@ func newProviderCmd(p config.Provider) *cobra.Command {
 		c.Flags().BoolVar(&yolo, "yolo", false, "enable the dangerous flag for this provider")
 		c.Flags().BoolVar(&safe, "safe", false, "disable any default dangerous flags")
 	}
+	c.Flags().BoolVar(&printOnly, "print", false, "print the command instead of running it")
 	return c
+}
+
+// recordLaunch persists recents and the last-launch record (best effort).
+func recordLaunch(s *state.State, dir, providerID string, flags []string, model string, st detect.Status) {
+	if s == nil {
+		return
+	}
+	s.TouchRecent(dir)
+	s.SetLastLaunch(state.LastLaunch{
+		ProviderID: providerID,
+		Folder:     dir,
+		Flags:      flags,
+		Model:      model,
+	})
+	_ = s.Save()
+}
+
+// printLocal renders the resolved local launch as a copy-pasteable command.
+func printLocal(dir, command string, args []string) error {
+	parts := append([]string{command}, args...)
+	if dir != "" {
+		fmt.Printf("cd %s && %s\n", shellArg(dir), shellJoin(parts))
+	} else {
+		fmt.Println(shellJoin(parts))
+	}
+	return nil
 }
 
 func resolveProviderStatus(p config.Provider) detect.Status {

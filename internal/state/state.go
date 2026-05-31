@@ -24,6 +24,45 @@ type State struct {
 	PreferredFlags    map[string][]string `json:"preferred_flags,omitempty"`
 	LaunchModes       map[string]string   `json:"launch_modes,omitempty"`
 	PreferredModels   map[string]string   `json:"preferred_models,omitempty"`
+	// SSHHosts are remote computers the user has saved ("add a computer").
+	SSHHosts []SSHHost `json:"ssh_hosts,omitempty"`
+	// RecentRemotes tracks recently used folders per remote host (keyed by target).
+	RecentRemotes []RecentRemote `json:"recent_remotes,omitempty"`
+	// LastLaunch records the most recent launch so `zap last` can replay it.
+	LastLaunch *LastLaunch `json:"last_launch,omitempty"`
+}
+
+// SSHHost is a saved remote computer. Target is what gets passed to ssh —
+// an alias from ~/.ssh/config (e.g. "devbox") or "user@host[:port handled via config]".
+type SSHHost struct {
+	Alias  string `json:"alias,omitempty"` // optional friendly name; falls back to Target
+	Target string `json:"target"`          // ssh destination
+	Shell  string `json:"shell,omitempty"` // remote login shell for PATH (default: bash)
+}
+
+// Label returns the display name for a host.
+func (h SSHHost) Label() string {
+	if h.Alias != "" {
+		return h.Alias
+	}
+	return h.Target
+}
+
+// RecentRemote is a remote folder path used on a given ssh target.
+type RecentRemote struct {
+	Target string    `json:"target"`
+	Path   string    `json:"path"`
+	TS     time.Time `json:"ts"`
+}
+
+// LastLaunch captures enough to replay the previous launch via `zap last`.
+type LastLaunch struct {
+	ProviderID string   `json:"provider_id"`
+	Folder     string   `json:"folder"` // local dir, or remote path when SSHTarget is set
+	Flags      []string `json:"flags,omitempty"`
+	Model      string   `json:"model,omitempty"`
+	SSHTarget  string   `json:"ssh_target,omitempty"` // empty => local launch
+	SSHShell   string   `json:"ssh_shell,omitempty"`
 }
 
 // SetLaunchMode persists the launch mode ("terminal" or "app") for a provider.
@@ -237,4 +276,84 @@ func (s *State) RecentsSorted(limit int) []RecentFolder {
 		out = out[:limit]
 	}
 	return out
+}
+
+// AddSSHHost saves a host, deduplicating by Target. An existing entry's alias
+// and shell are updated. Returns true if a new host was added.
+func (s *State) AddSSHHost(h SSHHost) bool {
+	for i := range s.SSHHosts {
+		if s.SSHHosts[i].Target == h.Target {
+			if h.Alias != "" {
+				s.SSHHosts[i].Alias = h.Alias
+			}
+			if h.Shell != "" {
+				s.SSHHosts[i].Shell = h.Shell
+			}
+			return false
+		}
+	}
+	s.SSHHosts = append(s.SSHHosts, h)
+	return true
+}
+
+// RemoveSSHHost removes a host by target. Returns true if removed.
+func (s *State) RemoveSSHHost(target string) bool {
+	for i, h := range s.SSHHosts {
+		if h.Target == target {
+			s.SSHHosts = append(s.SSHHosts[:i], s.SSHHosts[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+// FindSSHHost returns the saved host for a target, or nil.
+func (s *State) FindSSHHost(target string) *SSHHost {
+	for i := range s.SSHHosts {
+		if s.SSHHosts[i].Target == target {
+			return &s.SSHHosts[i]
+		}
+	}
+	return nil
+}
+
+// TouchRemote moves (target, path) to the front of remote recents.
+// Deduplicates by (target, path) and caps the per-target history at maxRecents.
+func (s *State) TouchRemote(target, path string) {
+	now := time.Now().UTC()
+	filtered := s.RecentRemotes[:0]
+	count := 0
+	for _, r := range s.RecentRemotes {
+		if r.Target == target && r.Path == path {
+			continue
+		}
+		if r.Target == target {
+			count++
+			if count >= maxRecents {
+				continue
+			}
+		}
+		filtered = append(filtered, r)
+	}
+	s.RecentRemotes = append([]RecentRemote{{Target: target, Path: path, TS: now}}, filtered...)
+}
+
+// RemoteRecents returns recent folders for a target, newest first, optionally capped.
+func (s *State) RemoteRecents(target string, limit int) []RecentRemote {
+	var out []RecentRemote
+	for _, r := range s.RecentRemotes {
+		if r.Target == target {
+			out = append(out, r)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].TS.After(out[j].TS) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+// SetLastLaunch records the most recent launch for `zap last`.
+func (s *State) SetLastLaunch(l LastLaunch) {
+	s.LastLaunch = &l
 }

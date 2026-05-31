@@ -14,13 +14,13 @@ import (
 type pickerState int
 
 const (
-	pickerStarting     pickerState = iota // ensuring ollama is running
-	pickerLoading                         // fetching model list
-	pickerWarning                         // loaded-model RAM warning
-	pickerStopping                        // stopping loaded models
-	pickerReady                           // showing model list + search
-	pickerPullConfirm                     // confirm download of a pull model
-	pickerError                           // unrecoverable error
+	pickerStarting    pickerState = iota // ensuring ollama is running
+	pickerLoading                        // fetching model list
+	pickerWarning                        // loaded-model RAM warning
+	pickerStopping                       // stopping loaded models
+	pickerReady                          // showing model list + search
+	pickerPullConfirm                    // confirm download of a pull model
+	pickerError                          // unrecoverable error
 )
 
 // modelItem is one row in the model list (section header or selectable model).

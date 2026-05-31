@@ -21,6 +21,9 @@ const (
 	screenFlags
 	screenSettings
 	screenModelPicker
+	screenHost
+	screenAddHost
+	screenRemoteFolder
 )
 
 type app struct {
@@ -29,15 +32,25 @@ type app struct {
 	statuses []detect.Status
 	state    *state.State
 
-	folder      *folderModel
-	browse      *browseModel
-	provider    *providerModel
-	flagsModel  *flagsModel
-	settings    *settingsModel
-	modelPicker *modelPickerModel
+	folder       *folderModel
+	browse       *browseModel
+	provider     *providerModel
+	flagsModel   *flagsModel
+	settings     *settingsModel
+	modelPicker  *modelPickerModel
+	host         *hostModel
+	addHost      *addHostModel
+	remoteFolder *remoteFolderModel
 
 	chosenFolder   string
 	chosenProvider *detect.Status
+
+	// remote is true once the user has chosen the SSH path; sshTarget/sshShell
+	// hold the selected host. Cleared by gotoProvider so a later local launch
+	// can never accidentally run over ssh.
+	remote    bool
+	sshTarget string
+	sshShell  string
 
 	width, height int
 
@@ -51,6 +64,10 @@ type launchResult struct {
 	Args          []string
 	LaunchMode    string // "terminal" or "app"
 	AppBundlePath string // macOS: /Applications/<bundle>.app, triggers `open -a`
+	ProviderID    string // for recording the last launch
+	Model         string // for recording the last launch (model-selector providers)
+	SSHTarget     string // non-empty => launch over ssh on this host
+	SSHShell      string // remote login shell when SSHTarget is set
 }
 
 // Run launches the interactive TUI. On selection, the chosen provider is exec'd
@@ -87,14 +104,48 @@ func Run() error {
 		return nil // user quit without selection
 	}
 
-	// Persist recent before exec replaces us.
-	final.state.TouchRecent(final.finalLaunch.Folder)
+	fl := final.finalLaunch
+
+	// Remote launch: record per-host recents + last launch, then ssh away.
+	if fl.SSHTarget != "" {
+		final.state.TouchRemote(fl.SSHTarget, fl.Folder)
+		final.state.SetLastLaunch(state.LastLaunch{
+			ProviderID: fl.ProviderID,
+			Folder:     fl.Folder,
+			Flags:      launchArgs(fl),
+			Model:      fl.Model,
+			SSHTarget:  fl.SSHTarget,
+			SSHShell:   fl.SSHShell,
+		})
+		_ = final.state.Save()
+		return launch.ExecSSH(fl.SSHTarget, fl.Folder, fl.Command, fl.Args, fl.SSHShell)
+	}
+
+	// Local launch: persist recent + last launch before exec replaces us.
+	final.state.TouchRecent(fl.Folder)
+	final.state.SetLastLaunch(state.LastLaunch{
+		ProviderID: fl.ProviderID,
+		Folder:     fl.Folder,
+		Flags:      launchArgs(fl),
+		Model:      fl.Model,
+	})
 	_ = final.state.Save()
 
-	if final.finalLaunch.LaunchMode == "app" {
-		return launch.Open(final.finalLaunch.Folder, final.finalLaunch.Command, final.finalLaunch.Args, final.finalLaunch.AppBundlePath)
+	if fl.LaunchMode == "app" {
+		return launch.Open(fl.Folder, fl.Command, fl.Args, fl.AppBundlePath)
 	}
-	return launch.Exec(final.finalLaunch.Folder, final.finalLaunch.Command, final.finalLaunch.Args, os.Environ())
+	return launch.Exec(fl.Folder, fl.Command, fl.Args, os.Environ())
+}
+
+// launchArgs returns the args to persist for `zap last`. It clones the slice so
+// the stored state is independent of the live launch result.
+func launchArgs(fl *launchResult) []string {
+	if len(fl.Args) == 0 {
+		return nil
+	}
+	out := make([]string, len(fl.Args))
+	copy(out, fl.Args)
+	return out
 }
 
 func (a *app) Init() tea.Cmd {
@@ -106,7 +157,11 @@ func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.width, a.height = wm.Width, wm.Height
 	}
 	if km, ok := msg.(tea.KeyMsg); ok {
-		if km.String() == "ctrl+c" || (km.String() == "q" && a.screen != screenBrowse && a.screen != screenModelPicker) {
+		// 'q' must not quit on screens that capture text input or use 'q'
+		// for navigation within a sub-list.
+		typing := a.screen == screenBrowse || a.screen == screenModelPicker ||
+			a.screen == screenAddHost || a.screen == screenRemoteFolder
+		if km.String() == "ctrl+c" || (km.String() == "q" && !typing) {
 			return a, tea.Quit
 		}
 	}
@@ -124,6 +179,12 @@ func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.settings.Update(msg)
 	case screenModelPicker:
 		return a.modelPicker.Update(msg)
+	case screenHost:
+		return a.host.Update(msg)
+	case screenAddHost:
+		return a.addHost.Update(msg)
+	case screenRemoteFolder:
+		return a.remoteFolder.Update(msg)
 	}
 	return a, nil
 }
@@ -142,6 +203,12 @@ func (a *app) View() string {
 		return a.settings.View()
 	case screenModelPicker:
 		return a.modelPicker.View()
+	case screenHost:
+		return a.host.View()
+	case screenAddHost:
+		return a.addHost.View()
+	case screenRemoteFolder:
+		return a.remoteFolder.View()
 	}
 	return ""
 }
@@ -154,11 +221,51 @@ func (a *app) gotoSettings() tea.Cmd {
 
 // transitions
 
+// gotoProvider is the LOCAL path. It clears remote state so a launch that
+// reaches here can never accidentally run over ssh, even after the user
+// backed out of the SSH flow with esc.
 func (a *app) gotoProvider(folder string) tea.Cmd {
+	a.remote = false
+	a.sshTarget = ""
+	a.sshShell = ""
 	a.chosenFolder = folder
 	a.provider = newProviderModel(a)
 	a.screen = screenProvider
 	return nil
+}
+
+// gotoRemoteProvider is the SSH path: it keeps remote=true and the chosen host.
+func (a *app) gotoRemoteProvider(remotePath string) tea.Cmd {
+	a.chosenFolder = remotePath
+	a.provider = newProviderModel(a)
+	a.screen = screenProvider
+	return nil
+}
+
+// gotoHost opens the remote-host picker (saved hosts + ~/.ssh/config + add).
+func (a *app) gotoHost() tea.Cmd {
+	a.host = newHostModel(a)
+	a.screen = screenHost
+	return nil
+}
+
+// gotoAddHost opens the "add a computer" text input.
+func (a *app) gotoAddHost() tea.Cmd {
+	a.addHost = newAddHostModel(a)
+	a.screen = screenAddHost
+	return a.addHost.Init()
+}
+
+// enterRemote records the chosen host and opens the remote-folder picker.
+func (a *app) enterRemote(target, shell string) tea.Cmd {
+	a.remote = true
+	a.sshTarget = target
+	a.sshShell = shell
+	a.state.AddSSHHost(state.SSHHost{Target: target, Shell: shell})
+	_ = a.state.Save()
+	a.remoteFolder = newRemoteFolderModel(a)
+	a.screen = screenRemoteFolder
+	return a.remoteFolder.Init()
 }
 
 func (a *app) gotoBrowse() tea.Cmd {
@@ -245,6 +352,16 @@ func (a *app) launch(st *detect.Status, extraFlags []string) tea.Cmd {
 		Args:          args,
 		LaunchMode:    mode,
 		AppBundlePath: st.AppBundlePath,
+		ProviderID:    st.Provider.ID,
+	}
+
+	// Remote launches always run in a terminal over ssh; GUI app-mode is
+	// meaningless across an ssh connection.
+	if a.remote {
+		a.finalLaunch.LaunchMode = "terminal"
+		a.finalLaunch.AppBundlePath = ""
+		a.finalLaunch.SSHTarget = a.sshTarget
+		a.finalLaunch.SSHShell = a.sshShell
 	}
 	return tea.Quit
 }

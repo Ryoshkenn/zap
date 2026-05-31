@@ -62,13 +62,20 @@ func newProviderModel(a *app) *providerModel {
 	delegate := list.NewDefaultDelegate()
 	delegate.SetSpacing(0)
 	l := list.New(items, delegate, 80, 22)
-	l.Title = "Pick a provider — " + abbrev(a.chosenFolder)
+	title := "Pick a provider — " + abbrev(a.chosenFolder)
+	if a.remote {
+		title = "Pick a provider — " + a.sshTarget + ":" + a.chosenFolder
+	}
+	l.Title = title
 	l.Styles.Title = titleStyle
 	l.SetShowStatusBar(false)
 	return &providerModel{app: a, list: l}
 }
 
 func buildProviderItems(a *app) []list.Item {
+	if a.remote {
+		return buildRemoteProviderItems(a)
+	}
 	starred := []list.Item{}
 	installed := []list.Item{}
 	missing := []list.Item{}
@@ -91,12 +98,49 @@ func buildProviderItems(a *app) []list.Item {
 	return append(out, missing...)
 }
 
+// buildRemoteProviderItems lists providers suitable for an ssh launch. We can't
+// detect installation on the remote host, so every provider is shown as
+// available. GUI app-mode providers (Cursor, VS Code…) and model-selector
+// providers (whose model defaults are local-only) are omitted — they don't
+// make sense over ssh.
+func buildRemoteProviderItems(a *app) []list.Item {
+	starred := []list.Item{}
+	rest := []list.Item{}
+	for _, st := range a.statuses {
+		if st.Provider.LaunchMode == "app" || st.Provider.ModelSelector {
+			continue
+		}
+		st.Installed = true // assume present on the remote; we can't LookPath there
+		item := providerItem{st: st, starred: a.state.IsFavoriteProvider(st.Provider.ID)}
+		if item.starred {
+			starred = append(starred, item)
+		} else {
+			rest = append(rest, item)
+		}
+	}
+	return append(starred, rest...)
+}
+
 func (m *providerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.list.SetSize(msg.Width-2, msg.Height-4)
 	case tea.KeyMsg:
 		switch msg.String() {
+		case "up", "k":
+			// Wrap to the bottom when pressing up at the top.
+			if m.list.FilterState() != list.Filtering && m.list.Index() == 0 {
+				if n := len(m.list.Items()); n > 0 {
+					m.list.Select(n - 1)
+				}
+				return m.app, nil
+			}
+		case "down", "j":
+			// Wrap to the top when pressing down at the bottom.
+			if m.list.FilterState() != list.Filtering && m.list.Index() == len(m.list.Items())-1 {
+				m.list.Select(0)
+				return m.app, nil
+			}
 		case "enter":
 			sel, ok := m.list.SelectedItem().(providerItem)
 			if !ok {
@@ -119,7 +163,11 @@ func (m *providerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m.app, nil
 		case "esc":
-			m.app.screen = screenFolder
+			if m.app.remote {
+				m.app.screen = screenRemoteFolder
+			} else {
+				m.app.screen = screenFolder
+			}
 			return m.app, nil
 		}
 	}

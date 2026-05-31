@@ -68,6 +68,26 @@ zap windsurf ~/projects/foo
 zap vscode ~/projects/foo
 ```
 
+### Remote (SSH)
+Launch a provider on another computer over SSH — same flow, different machine.
+
+In the interactive picker choose **🌐 SSH / Remote…**, then add a computer (an
+alias from your `~/.ssh/config`, or `user@host`), pick a remote folder, and pick
+a provider. zap hands off to `ssh -t` and the CLI runs on that machine.
+
+```sh
+zap ssh devbox                  # open a shell on devbox
+zap ssh devbox claude           # launch Claude in ~ on devbox
+zap ssh me@host claude ~/api    # launch Claude in ~/api on me@host
+zap ssh devbox codex --print    # show the ssh command without running it
+zap ssh devbox claude --shell zsh   # use zsh as the remote login shell
+```
+
+zap connects with your normal ssh keys and `~/.ssh/config` — it stores no
+passwords. The remote command runs inside a login shell (`bash -lc` by default)
+so the provider resolves on the remote `PATH`; if your remote uses a different
+shell, pass `--shell zsh` (it's remembered per host).
+
 ### Favorites
 ```sh
 zap favorite                    # star the current folder
@@ -79,15 +99,19 @@ zap list favorites              # show all stars
 
 ### Other
 ```sh
+zap last                        # re-launch the most recent folder + provider
+zap claude --print              # print the command instead of running it
+zap doctor                      # check config, ssh, and provider availability
 zap list                        # show all providers + install status
 zap config                      # print the resolved config path
-zap config edit                 # open ~/.config/zap/config.yaml in $EDITOR
+zap config edit                 # open the config file in $EDITOR
+zap uninstall                   # remove the zap binary (--purge also drops config/state)
 zap --version
 ```
 
 ## Configuration
 
-Optional. `zap` works out of the box. Override defaults by creating `~/.config/zap/config.yaml` (or `%APPDATA%\zap\config.yaml` on Windows):
+Optional. `zap` works out of the box. Override defaults by creating a `config.yaml` in zap's config directory — run `zap config` to print the exact path. That's `~/Library/Application Support/zap/config.yaml` (macOS), `~/.config/zap/config.yaml` (Linux), or `%APPDATA%\zap\config.yaml` (Windows):
 
 ```yaml
 # Per-provider defaults
@@ -114,7 +138,7 @@ Favorites, recents, and per-provider flag preferences are stored at `~/Library/A
 | Claude Code | `claude` | `--yolo` toggles `--dangerously-skip-permissions` |
 | Codex CLI | `codex` | |
 | Gemini CLI | `gemini` | |
-| opencode | `opencode` | |
+| opencode | `opencode run` | `--yolo` toggles `--dangerously-skip-permissions` (default: on) |
 | Cursor | `cursor` or `/Applications/Cursor.app` | opens as an app by default |
 | Windsurf | `windsurf` or `/Applications/Windsurf.app` | opens as an app by default |
 | VS Code | `code` or `/Applications/Visual Studio Code.app` | opens as an app by default |

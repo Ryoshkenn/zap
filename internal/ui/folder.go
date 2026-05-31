@@ -108,22 +108,25 @@ func buildFolderItems(s *state.State) []list.Item {
 
 	items = append(items, folderItem{label: "📁 Current: " + abbrev(cwd), path: cwd, section: "current"})
 	items = append(items, folderItem{label: "➜  Browse folders…", path: "", section: "browse"})
+	items = append(items, folderItem{label: "🌐 SSH / Remote…", path: "", section: "ssh"})
 	items = append(items, folderItem{label: "⚙  Settings…", path: "", section: "settings"})
 	return items
 }
 
+// skipSep moves the selection by dir to the next non-separator row, wrapping
+// around at either end so up from the top lands on the bottom and vice versa.
 func (m *folderModel) skipSep(from, dir int) {
 	items := m.list.Items()
+	n := len(items)
+	if n == 0 {
+		return
+	}
 	idx := from
-	for {
-		next := idx + dir
-		if next < 0 || next >= len(items) {
-			break
-		}
-		idx = next
+	for i := 0; i < n; i++ {
+		idx = (idx + dir + n) % n
 		if _, isSep := items[idx].(separatorItem); !isSep {
 			m.list.Select(idx)
-			break
+			return
 		}
 	}
 }
@@ -153,6 +156,8 @@ func (m *folderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch sel.section {
 			case "browse":
 				return m.app, m.app.gotoBrowse()
+			case "ssh":
+				return m.app, m.app.gotoHost()
 			case "settings":
 				return m.app, m.app.gotoSettings()
 			}
@@ -236,12 +241,12 @@ func (m *browseModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if km, ok := msg.(tea.KeyMsg); ok {
 		switch km.String() {
 		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
+			if n := len(m.entries); n > 0 {
+				m.cursor = (m.cursor - 1 + n) % n
 			}
 		case "down", "j":
-			if m.cursor < len(m.entries)-1 {
-				m.cursor++
+			if n := len(m.entries); n > 0 {
+				m.cursor = (m.cursor + 1) % n
 			}
 		case "left", "h", "backspace":
 			parent := parentOf(m.cwd)

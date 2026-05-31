@@ -1,0 +1,65 @@
+package cmd
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+
+	"github.com/Ryoshkenn/zap/internal/config"
+	"github.com/Ryoshkenn/zap/internal/launch"
+	"github.com/Ryoshkenn/zap/internal/state"
+)
+
+// newLastCmd builds `zap last` (alias `resume`): replay the previous launch.
+func newLastCmd(cfg *config.Config) *cobra.Command {
+	var printOnly bool
+	c := &cobra.Command{
+		Use:     "last",
+		Aliases: []string{"resume"},
+		Short:   "Re-launch the most recent folder + provider",
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, _ := state.Load()
+			if s == nil || s.LastLaunch == nil {
+				return fmt.Errorf("no previous launch recorded yet — run zap once first")
+			}
+			l := s.LastLaunch
+
+			p := cfg.FindProvider(l.ProviderID)
+			if p == nil {
+				return fmt.Errorf("provider %q from last launch is no longer configured", l.ProviderID)
+			}
+
+			where := abbrevHome(l.Folder)
+			if l.SSHTarget != "" {
+				where = l.SSHTarget + ":" + l.Folder
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "↻ %s in %s\n", p.Name, where)
+
+			// Remote replay.
+			if l.SSHTarget != "" {
+				if printOnly {
+					for _, a := range launch.SSHArgs(l.SSHTarget, l.Folder, p.Command, l.Flags, l.SSHShell) {
+						fmt.Printf("%s ", shellArg(a))
+					}
+					fmt.Println()
+					return nil
+				}
+				return launchSSH(l.SSHTarget, l.Folder, p.Command, l.Flags, l.SSHShell)
+			}
+
+			// Local replay.
+			st := resolveProviderStatus(*p)
+			if !st.Installed {
+				return fmt.Errorf("%s is no longer installed", p.Name)
+			}
+			if printOnly {
+				return printLocal(l.Folder, st.Provider.Command, l.Flags)
+			}
+			recordLaunch(s, l.Folder, p.ID, l.Flags, l.Model, st)
+			return launchProvider(l.Folder, st, l.Flags, s)
+		},
+	}
+	c.Flags().BoolVar(&printOnly, "print", false, "print the command instead of running it")
+	return c
+}
