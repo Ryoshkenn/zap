@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Ryoshkenn/zap/internal/config"
+	"github.com/Ryoshkenn/zap/internal/telemetry"
 	"github.com/Ryoshkenn/zap/internal/ui"
 )
 
@@ -61,9 +62,15 @@ Run "zap" with no args for the interactive picker, or use subcommands for fast l
 // Execute runs the root command and exits with an appropriate status.
 func Execute(version string) {
 	Version = version
+	telemetry.Init(version)
+	telemetry.Track("zap_opened", nil)
+
 	root := NewRootCmd()
 	if err := root.Execute(); err != nil {
+		telemetry.Shutdown()
 		fmt.Fprintf(os.Stderr, "zap: %v\n", err)
 		os.Exit(1)
 	}
+	// Flush for commands that return normally (non-exec paths).
+	telemetry.Shutdown()
 }

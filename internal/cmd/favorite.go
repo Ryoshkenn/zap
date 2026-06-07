@@ -9,6 +9,7 @@ import (
 
 	"github.com/Ryoshkenn/zap/internal/config"
 	"github.com/Ryoshkenn/zap/internal/state"
+	"github.com/Ryoshkenn/zap/internal/telemetry"
 )
 
 func newFavoriteCmd() *cobra.Command {
@@ -73,6 +74,10 @@ func toggleFavorite(args []string, add bool) error {
 }
 
 func applyFolder(s *state.State, path string, add bool) {
+	action := "add"
+	if !add {
+		action = "remove"
+	}
 	if add {
 		if s.AddFavoriteFolder(path) {
 			fmt.Printf("⭐ starred folder: %s\n", path)
@@ -86,9 +91,18 @@ func applyFolder(s *state.State, path string, add bool) {
 			fmt.Printf("not in favorites: %s\n", path)
 		}
 	}
+	telemetry.Track("zap_command", map[string]any{
+		"command":     "favorite",
+		"target_type": "folder",
+		"action":      action,
+	})
 }
 
 func applyProvider(s *state.State, id string, add bool) {
+	action := "add"
+	if !add {
+		action = "remove"
+	}
 	if add {
 		if s.AddFavoriteProvider(id) {
 			fmt.Printf("⭐ starred provider: %s\n", id)
@@ -102,4 +116,9 @@ func applyProvider(s *state.State, id string, add bool) {
 			fmt.Printf("not in favorites: %s\n", id)
 		}
 	}
+	telemetry.Track("zap_command", map[string]any{
+		"command":     "favorite",
+		"target_type": "provider",
+		"action":      action,
+	})
 }

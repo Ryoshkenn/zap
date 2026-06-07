@@ -30,6 +30,8 @@ type State struct {
 	RecentRemotes []RecentRemote `json:"recent_remotes,omitempty"`
 	// LastLaunch records the most recent launch so `zap last` can replay it.
 	LastLaunch *LastLaunch `json:"last_launch,omitempty"`
+	// InstallID is a stable anonymous identifier generated on first run.
+	InstallID string `json:"install_id,omitempty"`
 }
 
 // SSHHost is a saved remote computer. Target is what gets passed to ssh —

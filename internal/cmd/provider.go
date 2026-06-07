@@ -11,6 +11,7 @@ import (
 	"github.com/Ryoshkenn/zap/internal/detect"
 	"github.com/Ryoshkenn/zap/internal/launch"
 	"github.com/Ryoshkenn/zap/internal/state"
+	"github.com/Ryoshkenn/zap/internal/telemetry"
 )
 
 var (
@@ -63,6 +64,15 @@ func newProviderCmd(p config.Provider) *cobra.Command {
 					return printLocal(dir, st.Provider.Command, runArgs)
 				}
 				recordLaunch(s, dir, p.ID, runArgs, model, st)
+				telemetry.Track("zap_launch", map[string]any{
+					"provider":    p.ID,
+					"is_remote":   false,
+					"is_yolo":     false,
+					"has_model":   true,
+					"launch_mode": resolveLaunchMode(st, s),
+					"trigger":     "direct",
+				})
+				telemetry.Shutdown()
 				return launchProvider(dir, st, runArgs, s)
 			}
 
@@ -73,6 +83,15 @@ func newProviderCmd(p config.Provider) *cobra.Command {
 			}
 
 			recordLaunch(s, dir, p.ID, flags, "", st)
+			telemetry.Track("zap_launch", map[string]any{
+				"provider":    p.ID,
+				"is_remote":   false,
+				"is_yolo":     yolo,
+				"has_model":   false,
+				"launch_mode": resolveLaunchMode(st, s),
+				"trigger":     "direct",
+			})
+			telemetry.Shutdown()
 			return launchProvider(dir, st, flags, s)
 		},
 	}
@@ -112,6 +131,19 @@ func printLocal(dir, command string, args []string) error {
 
 func resolveProviderStatus(p config.Provider) detect.Status {
 	return detect.ProviderStatus(p)
+}
+
+func resolveLaunchMode(st detect.Status, s *state.State) string {
+	mode := st.Provider.LaunchMode
+	if mode == "" {
+		mode = "terminal"
+	}
+	if s != nil {
+		if saved, ok := s.LaunchModeFor(st.Provider.ID); ok {
+			mode = saved
+		}
+	}
+	return mode
 }
 
 func launchProvider(dir string, st detect.Status, flags []string, s *state.State) error {

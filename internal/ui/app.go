@@ -10,6 +10,7 @@ import (
 	"github.com/Ryoshkenn/zap/internal/detect"
 	"github.com/Ryoshkenn/zap/internal/launch"
 	"github.com/Ryoshkenn/zap/internal/state"
+	"github.com/Ryoshkenn/zap/internal/telemetry"
 )
 
 type screen int
@@ -118,6 +119,15 @@ func Run() error {
 			SSHShell:   fl.SSHShell,
 		})
 		_ = final.state.Save()
+		telemetry.Track("zap_launch", map[string]any{
+			"provider":    fl.ProviderID,
+			"is_remote":   true,
+			"is_yolo":     false,
+			"has_model":   fl.Model != "",
+			"launch_mode": "terminal",
+			"trigger":     "interactive",
+		})
+		telemetry.Shutdown()
 		return launch.ExecSSH(fl.SSHTarget, fl.Folder, fl.Command, fl.Args, fl.SSHShell)
 	}
 
@@ -130,6 +140,16 @@ func Run() error {
 		Model:      fl.Model,
 	})
 	_ = final.state.Save()
+
+	telemetry.Track("zap_launch", map[string]any{
+		"provider":    fl.ProviderID,
+		"is_remote":   false,
+		"is_yolo":     false,
+		"has_model":   fl.Model != "",
+		"launch_mode": fl.LaunchMode,
+		"trigger":     "interactive",
+	})
+	telemetry.Shutdown()
 
 	if fl.LaunchMode == "app" {
 		return launch.Open(fl.Folder, fl.Command, fl.Args, fl.AppBundlePath)
@@ -277,7 +297,16 @@ func (a *app) gotoBrowse() tea.Cmd {
 func (a *app) gotoFlags(st *detect.Status) tea.Cmd {
 	a.chosenProvider = st
 	if st.Provider.ModelSelector {
-		return a.gotoModelPicker(st, screenProvider)
+		// Model selection lives in Settings now. Launch straight away with the
+		// chosen default; if none is set yet, send the user to Settings to pick
+		// (or download) one.
+		model, ok := a.state.PreferredModelFor(st.Provider.ID)
+		if !ok {
+			return a.gotoSettings()
+		}
+		copy := *st
+		copy.Provider.DefaultFlags = nil
+		return a.launch(&copy, []string{"run", model})
 	}
 	// Apply saved preferred flags if present, otherwise use defaults — skip the
 	// flags picker screen entirely (flags are configurable in Settings).
@@ -303,22 +332,18 @@ func (a *app) gotoFlags(st *detect.Status) tea.Cmd {
 	return a.launch(&copy, extra)
 }
 
-func (a *app) gotoModelPicker(st *detect.Status, returnTo screen) tea.Cmd {
+// gotoModelPicker opens the Ollama model manager from Settings: choose a default
+// from downloaded/cloud models, or download a new one.
+func (a *app) gotoModelPicker(st *detect.Status) tea.Cmd {
 	a.chosenProvider = st
 	onSelect := func(model string) tea.Cmd {
 		a.state.SetPreferredModel(st.Provider.ID, model)
 		_ = a.state.Save()
-		if returnTo == screenSettings {
-			a.settings.rebuild()
-			a.screen = screenSettings
-			return nil
-		}
-		// Launch flow: pass "run" + model as args.
-		copy := *st
-		copy.Provider.DefaultFlags = nil
-		return a.launch(&copy, []string{"run", model})
+		a.settings.rebuild()
+		a.screen = screenSettings
+		return nil
 	}
-	a.modelPicker = newModelPickerModel(a, st.Provider.ID, onSelect, returnTo, returnTo == screenSettings)
+	a.modelPicker = newModelPickerModel(a, st.Provider.ID, onSelect)
 	a.screen = screenModelPicker
 	return a.modelPicker.Init()
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/Ryoshkenn/zap/internal/detect"
 	"github.com/Ryoshkenn/zap/internal/sshconf"
 	"github.com/Ryoshkenn/zap/internal/state"
+	"github.com/Ryoshkenn/zap/internal/telemetry"
 )
 
 // newDoctorCmd builds `zap doctor`: a health summary of zap's environment.
@@ -21,6 +22,7 @@ func newDoctorCmd(cfg *config.Config) *cobra.Command {
 		Short: "Check zap's environment, config, and provider availability",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			telemetry.Track("zap_command", map[string]any{"command": "doctor"})
 			return runDoctor(cfg)
 		},
 	}

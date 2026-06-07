@@ -8,6 +8,7 @@ import (
 	"github.com/Ryoshkenn/zap/internal/config"
 	"github.com/Ryoshkenn/zap/internal/launch"
 	"github.com/Ryoshkenn/zap/internal/state"
+	"github.com/Ryoshkenn/zap/internal/telemetry"
 )
 
 // newLastCmd builds `zap last` (alias `resume`): replay the previous launch.
@@ -45,6 +46,15 @@ func newLastCmd(cfg *config.Config) *cobra.Command {
 					fmt.Println()
 					return nil
 				}
+				telemetry.Track("zap_launch", map[string]any{
+					"provider":    l.ProviderID,
+					"is_remote":   true,
+					"is_yolo":     false,
+					"has_model":   l.Model != "",
+					"launch_mode": "terminal",
+					"trigger":     "last",
+				})
+				telemetry.Shutdown()
 				return launchSSH(l.SSHTarget, l.Folder, p.Command, l.Flags, l.SSHShell)
 			}
 
@@ -57,6 +67,15 @@ func newLastCmd(cfg *config.Config) *cobra.Command {
 				return printLocal(l.Folder, st.Provider.Command, l.Flags)
 			}
 			recordLaunch(s, l.Folder, p.ID, l.Flags, l.Model, st)
+			telemetry.Track("zap_launch", map[string]any{
+				"provider":    l.ProviderID,
+				"is_remote":   false,
+				"is_yolo":     false,
+				"has_model":   l.Model != "",
+				"launch_mode": resolveLaunchMode(st, s),
+				"trigger":     "last",
+			})
+			telemetry.Shutdown()
 			return launchProvider(l.Folder, st, l.Flags, s)
 		},
 	}

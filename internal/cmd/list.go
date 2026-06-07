@@ -9,6 +9,7 @@ import (
 	"github.com/Ryoshkenn/zap/internal/config"
 	"github.com/Ryoshkenn/zap/internal/detect"
 	"github.com/Ryoshkenn/zap/internal/state"
+	"github.com/Ryoshkenn/zap/internal/telemetry"
 )
 
 func newListCmd(cfg *config.Config) *cobra.Command {
@@ -18,8 +19,10 @@ func newListCmd(cfg *config.Config) *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 && args[0] == "favorites" {
+				telemetry.Track("zap_command", map[string]any{"command": "list_favorites"})
 				return listFavorites()
 			}
+			telemetry.Track("zap_command", map[string]any{"command": "list"})
 			return listProviders(cfg)
 		},
 	}

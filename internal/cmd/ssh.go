@@ -8,6 +8,7 @@ import (
 	"github.com/Ryoshkenn/zap/internal/config"
 	"github.com/Ryoshkenn/zap/internal/launch"
 	"github.com/Ryoshkenn/zap/internal/state"
+	"github.com/Ryoshkenn/zap/internal/telemetry"
 )
 
 var launchSSH = launch.ExecSSH
@@ -48,6 +49,11 @@ remote PATH (override the shell with --shell if you don't use bash).`,
 					return nil
 				}
 				rememberHost(s, target, shell, "")
+				telemetry.Track("zap_command", map[string]any{
+					"command":      "ssh_shell",
+					"has_provider": false,
+				})
+				telemetry.Shutdown()
 				return launchSSH(target, "", "", nil, shell)
 			}
 
@@ -75,6 +81,15 @@ remote PATH (override the shell with --shell if you don't use bash).`,
 			}
 
 			rememberRemoteLaunch(s, target, shell, remoteDir, p.ID, flags)
+			telemetry.Track("zap_launch", map[string]any{
+				"provider":    p.ID,
+				"is_remote":   true,
+				"is_yolo":     yolo,
+				"has_model":   false,
+				"launch_mode": "terminal",
+				"trigger":     "direct",
+			})
+			telemetry.Shutdown()
 			return launchSSH(target, remoteDir, p.Command, flags, shell)
 		},
 	}
