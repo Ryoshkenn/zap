@@ -332,18 +332,22 @@ func (a *app) gotoFlags(st *detect.Status) tea.Cmd {
 	return a.launch(&copy, extra)
 }
 
-// gotoModelPicker opens the Ollama model manager from Settings: choose a default
-// from downloaded/cloud models, or download a new one.
-func (a *app) gotoModelPicker(st *detect.Status) tea.Cmd {
+// gotoModelPicker opens the Ollama model manager: choose a default from
+// downloaded/cloud models, or download a new one. returnTo is the screen the
+// picker goes back to once a model is chosen or the picker is dismissed.
+func (a *app) gotoModelPicker(st *detect.Status, returnTo screen) tea.Cmd {
 	a.chosenProvider = st
+	settingsMode := returnTo == screenSettings
 	onSelect := func(model string) tea.Cmd {
 		a.state.SetPreferredModel(st.Provider.ID, model)
 		_ = a.state.Save()
-		a.settings.rebuild()
-		a.screen = screenSettings
+		if settingsMode {
+			a.settings.rebuild()
+		}
+		a.screen = returnTo
 		return nil
 	}
-	a.modelPicker = newModelPickerModel(a, st.Provider.ID, onSelect)
+	a.modelPicker = newModelPickerModel(a, st.Provider.ID, onSelect, returnTo, settingsMode)
 	a.screen = screenModelPicker
 	return a.modelPicker.Init()
 }
