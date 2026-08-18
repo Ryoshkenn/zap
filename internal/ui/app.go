@@ -55,6 +55,12 @@ type app struct {
 
 	width, height int
 
+	// Background release check results, surfaced as a banner under any screen.
+	updateAvailable bool
+	updateLatest    string
+	updateURL       string
+	updateErr       error
+
 	finalLaunch *launchResult
 	err         error
 }
@@ -73,7 +79,10 @@ type launchResult struct {
 
 // Run launches the interactive TUI. On selection, the chosen provider is exec'd
 // in the chosen folder, replacing the zap process (Unix) or running as child (Windows).
-func Run() error {
+// version is the running zap build, used by the background update check.
+func Run(version string) error {
+	Version = version
+
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -169,12 +178,16 @@ func launchArgs(fl *launchResult) []string {
 }
 
 func (a *app) Init() tea.Cmd {
-	return nil
+	return backgroundUpdateCheck(a)
 }
 
 func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if wm, ok := msg.(tea.WindowSizeMsg); ok {
 		a.width, a.height = wm.Width, wm.Height
+	}
+	if um, ok := msg.(updateCheckedMsg); ok {
+		a.applyUpdateCheck(um)
+		// Fall through: Settings shows the outcome of a manual check.
 	}
 	if km, ok := msg.(tea.KeyMsg); ok {
 		// 'q' must not quit on screens that capture text input or use 'q'
@@ -210,6 +223,10 @@ func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a *app) View() string {
+	return a.screenView() + a.updateBanner()
+}
+
+func (a *app) screenView() string {
 	switch a.screen {
 	case screenFolder:
 		return a.folder.View()

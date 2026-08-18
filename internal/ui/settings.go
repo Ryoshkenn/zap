@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -16,17 +18,22 @@ type settingsModel struct {
 	rows   []settingsRow
 	cursor int
 	dirty  bool
+	// updateStatus is the result of a manual "check now", shown inline.
+	updateStatus string
+	checking     bool
 }
 
 // settingsRow is one togglable flag (or a provider header row, launch mode toggle, or model selector).
 type settingsRow struct {
-	isHeader      bool
-	isLaunchMode  bool
-	isModelSelect bool
-	providerID    string
-	flag          config.Flag
-	on            bool
-	label         string
+	isHeader       bool
+	isLaunchMode   bool
+	isModelSelect  bool
+	isUpdateToggle bool
+	isUpdateCheck  bool
+	providerID     string
+	flag           config.Flag
+	on             bool
+	label          string
 }
 
 func newSettingsModel(a *app) *settingsModel {
@@ -37,6 +44,7 @@ func newSettingsModel(a *app) *settingsModel {
 
 func (m *settingsModel) rebuild() {
 	m.rows = m.rows[:0]
+	m.appendUpdateRows()
 	for _, p := range m.app.cfg.Providers {
 		m.rows = append(m.rows, settingsRow{
 			isHeader: true,
@@ -96,6 +104,49 @@ func (m *settingsModel) rebuild() {
 	}
 }
 
+// appendUpdateRows builds the "Updates" section: the background-check toggle
+// and a manual check action.
+func (m *settingsModel) appendUpdateRows() {
+	m.rows = append(m.rows, settingsRow{
+		isHeader: true,
+		label:    "⬆  Updates  " + mutedStyle.Render("(zap "+Version+")"),
+	})
+
+	m.rows = append(m.rows, settingsRow{
+		isUpdateToggle: true,
+		on:             m.app.state.AutoCheckUpdates(),
+		label:          "Check for updates automatically  " + mutedStyle.Render("(every 24h)"),
+	})
+
+	m.rows = append(m.rows, settingsRow{
+		isUpdateCheck: true,
+		label:         "Check for updates now  " + mutedStyle.Render(m.lastCheckLabel()),
+	})
+
+	// Spacer between the global update settings and the per-provider sections.
+	// Header rows are non-interactive, so the cursor skips straight over it.
+	m.rows = append(m.rows, settingsRow{isHeader: true})
+}
+
+// lastCheckLabel describes when the last successful check happened.
+func (m *settingsModel) lastCheckLabel() string {
+	last := m.app.state.Updates.LastCheck
+	if last.IsZero() {
+		return "(never checked)"
+	}
+	d := time.Since(last)
+	switch {
+	case d < time.Minute:
+		return "(checked just now)"
+	case d < time.Hour:
+		return fmt.Sprintf("(checked %dm ago)", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("(checked %dh ago)", int(d.Hours()))
+	default:
+		return fmt.Sprintf("(checked %dd ago)", int(d.Hours()/24))
+	}
+}
+
 func (m *settingsModel) advance(dir int) {
 	if len(m.rows) == 0 {
 		return
@@ -113,6 +164,12 @@ func (m *settingsModel) isInteractive(r settingsRow) bool {
 }
 
 func (m *settingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if um, ok := msg.(updateCheckedMsg); ok {
+		m.checking = false
+		m.updateStatus = describeCheck(um)
+		m.rebuild() // refresh the "checked Nm ago" label
+		return m.app, nil
+	}
 	if km, ok := msg.(tea.KeyMsg); ok {
 		switch km.String() {
 		case "up", "k":
@@ -132,6 +189,14 @@ func (m *settingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				fakeStatus := &detect.Status{Provider: *st}
 				return m.app, m.app.gotoModelPicker(fakeStatus, screenSettings)
 			}
+			if r.isUpdateCheck {
+				if m.checking {
+					return m.app, nil
+				}
+				m.checking = true
+				m.updateStatus = "checking…"
+				return m.app, checkUpdateCmd(true)
+			}
 			r.on = !r.on
 			m.persistRow(r)
 			m.dirty = true
@@ -145,6 +210,11 @@ func (m *settingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *settingsModel) persistRow(r *settingsRow) {
+	if r.isUpdateToggle {
+		m.app.state.SetAutoCheckUpdates(r.on)
+		_ = m.app.state.Save()
+		return
+	}
 	if r.isLaunchMode {
 		mode := "terminal"
 		if r.on {
@@ -157,7 +227,8 @@ func (m *settingsModel) persistRow(r *settingsRow) {
 	// Collect current state of all flag rows for this provider.
 	current := []string{}
 	for _, row := range m.rows {
-		if row.providerID == r.providerID && !row.isLaunchMode && row.on {
+		if row.providerID == r.providerID && !row.isLaunchMode &&
+			!row.isUpdateToggle && !row.isUpdateCheck && row.on {
 			current = append(current, row.flag.Flag)
 		}
 	}
@@ -167,7 +238,7 @@ func (m *settingsModel) persistRow(r *settingsRow) {
 
 func (m *settingsModel) View() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Settings — default flags per provider"))
+	b.WriteString(titleStyle.Render("Settings"))
 	b.WriteString("\n")
 	b.WriteString(subtleStyle.Render("  These persist across launches. Override per-run with `zap <provider> --safe`."))
 	b.WriteString("\n\n")
@@ -182,6 +253,14 @@ func (m *settingsModel) View() string {
 		}
 		if r.isModelSelect {
 			b.WriteString(marker + highlightStyle.Render("[→]") + " " + r.label + "\n")
+			continue
+		}
+		if r.isUpdateCheck {
+			b.WriteString(marker + highlightStyle.Render("[→]") + " " + r.label)
+			if m.updateStatus != "" {
+				b.WriteString("  " + hintStyle.Render(m.updateStatus))
+			}
+			b.WriteString("\n")
 			continue
 		}
 		check := "[ ]"

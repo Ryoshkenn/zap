@@ -24,16 +24,10 @@ func (s Source) SelfManaged() bool {
 	return s == SourceGoInstall || s == SourceManual
 }
 
-// UpgradeHint is the command a user should run when a package manager owns the
-// binary. Empty for self-managed installs.
+// UpgradeHint is the command a user would run by hand when a package manager
+// owns the binary. Empty for self-managed installs.
 func (s Source) UpgradeHint() string {
-	switch s {
-	case SourceHomebrew:
-		return "brew upgrade zap"
-	case SourceScoop:
-		return "scoop update zap"
-	}
-	return ""
+	return joinArgv(s.UpgradeCommand())
 }
 
 // ExePath returns the fully resolved path to the running zap binary.

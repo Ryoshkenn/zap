@@ -11,7 +11,7 @@ import (
 	"github.com/Ryoshkenn/zap/internal/ui"
 )
 
-var Version = "dev"
+var Version = "v1.2.0"
 
 // NewRootCmd builds the cobra root with all subcommands wired in.
 func NewRootCmd() *cobra.Command {
@@ -32,7 +32,7 @@ Run "zap" with no args for the interactive picker, or use subcommands for fast l
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return ui.Run()
+			return ui.Run(Version)
 		},
 	}
 

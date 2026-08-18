@@ -109,6 +109,26 @@ zap uninstall                   # remove the zap binary (--purge also drops conf
 zap --version
 ```
 
+### Updating
+```sh
+zap update                      # check for a new release and install it
+zap update --check              # only report whether an update is available
+zap update --yes                # skip the confirmation prompt
+```
+
+zap upgrades itself the same way it was installed. Homebrew and Scoop installs
+shell out to `brew upgrade zap` / `scoop update zap`, so the package manager
+keeps ownership of its own bookkeeping. `go install` and manual installs get an
+in-place binary swap: zap downloads the release archive for your platform,
+verifies it against the release's SHA-256 checksums, and only then replaces the
+binary — keeping the previous one aside to roll back to if the swap fails.
+
+zap also checks for new releases in the background once every 24 hours and shows
+a one-line notice when one is available. The result is cached in `state.json`, so
+a launch inside that window costs no network call at all. Turn it off — or run a
+check on demand — under **Updates** in the settings screen (`i` from the folder
+picker, or the Settings entry in the list).
+
 ## Configuration
 
 Optional. `zap` works out of the box. Override defaults by creating a `config.yaml` in zap's config directory — run `zap config` to print the exact path. That's `~/Library/Application Support/zap/config.yaml` (macOS), `~/.config/zap/config.yaml` (Linux), or `%APPDATA%\zap\config.yaml` (Windows):

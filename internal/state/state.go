@@ -32,6 +32,24 @@ type State struct {
 	LastLaunch *LastLaunch `json:"last_launch,omitempty"`
 	// InstallID is a stable anonymous identifier generated on first run.
 	InstallID string `json:"install_id,omitempty"`
+	// Updates tracks the background release check.
+	Updates UpdateState `json:"updates"`
+}
+
+// UpdateState is the persisted result of the background update check, so zap
+// can show "update available" instantly on the next run without hitting the
+// network every time it starts.
+type UpdateState struct {
+	// AutoCheck gates the background check. It is a pointer so an unset value
+	// (an existing state.json written before this feature) reads as the
+	// default rather than as an explicit "off".
+	AutoCheck *bool `json:"auto_check,omitempty"`
+	// LastCheck is when zap last successfully reached the releases API.
+	LastCheck time.Time `json:"last_check,omitempty"`
+	// LatestVersion is the newest release tag seen, e.g. "v1.3.0".
+	LatestVersion string `json:"latest_version,omitempty"`
+	// ReleaseURL points at the release notes for LatestVersion.
+	ReleaseURL string `json:"release_url,omitempty"`
 }
 
 // SSHHost is a saved remote computer. Target is what gets passed to ssh —
@@ -358,4 +376,39 @@ func (s *State) RemoteRecents(target string, limit int) []RecentRemote {
 // SetLastLaunch records the most recent launch for `zap last`.
 func (s *State) SetLastLaunch(l LastLaunch) {
 	s.LastLaunch = &l
+}
+
+// UpdateCheckInterval is how long a background check result stays fresh.
+const UpdateCheckInterval = 24 * time.Hour
+
+// AutoCheckUpdates reports whether zap should check for new releases in the
+// background. Defaults to true for a state file that has never set it.
+func (s *State) AutoCheckUpdates() bool {
+	if s.Updates.AutoCheck == nil {
+		return true
+	}
+	return *s.Updates.AutoCheck
+}
+
+// SetAutoCheckUpdates records an explicit on/off choice for the background check.
+func (s *State) SetAutoCheckUpdates(on bool) {
+	s.Updates.AutoCheck = &on
+}
+
+// UpdateCheckDue reports whether the cached result has gone stale. now is
+// passed in so tests do not depend on the wall clock.
+func (s *State) UpdateCheckDue(now time.Time) bool {
+	if s.Updates.LastCheck.IsZero() {
+		return true
+	}
+	return now.Sub(s.Updates.LastCheck) >= UpdateCheckInterval
+}
+
+// RecordUpdateCheck caches the outcome of a successful check. A failed check
+// must not call this: leaving LastCheck alone means an offline run retries on
+// the next start instead of going quiet for a day.
+func (s *State) RecordUpdateCheck(now time.Time, latestVersion, releaseURL string) {
+	s.Updates.LastCheck = now
+	s.Updates.LatestVersion = latestVersion
+	s.Updates.ReleaseURL = releaseURL
 }

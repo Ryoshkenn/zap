@@ -10,14 +10,16 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Ryoshkenn/zap/internal/selfupdate"
+	"github.com/Ryoshkenn/zap/internal/state"
 )
 
-// newUpdateCmd builds `zap update`: check for a newer release and, for
-// self-managed installs, replace the running binary in place.
+// newUpdateCmd builds `zap update`: check for a newer release and install it
+// the way this install expects to be upgraded.
 //
-// The split mirrors `zap uninstall`: when a package manager owns the binary we
-// print its upgrade command instead of touching the file, so Homebrew and Scoop
-// bookkeeping stays correct.
+// Homebrew and Scoop installs are upgraded by running the package manager, not
+// by overwriting the binary — the manager owns its receipts and version
+// bookkeeping, and a hand-swapped file would leave it out of sync. go-install
+// and manual installs get an in-place, checksum-verified binary swap.
 func newUpdateCmd() *cobra.Command {
 	var checkOnly, yes bool
 	c := &cobra.Command{
@@ -25,10 +27,15 @@ func newUpdateCmd() *cobra.Command {
 		Short: "Update zap to the latest release",
 		Long: `Check GitHub for a newer zap release and install it.
 
-If zap was installed with Homebrew or Scoop, this prints the right upgrade
-command rather than overwriting a package-managed binary. For go-install and
-manual installs, zap downloads the release archive for your platform, verifies
-its SHA-256 against the release checksums, and swaps the binary in place.`,
+zap upgrades itself the same way it was installed:
+
+  Homebrew        runs "brew upgrade zap"
+  Scoop           runs "scoop update zap"
+  go install      downloads the release archive and swaps the binary
+  manual install  downloads the release archive and swaps the binary
+
+Downloaded archives are verified against the release's SHA-256 checksums
+before anything is installed.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runUpdate(cmd, checkOnly, yes)
@@ -42,13 +49,17 @@ its SHA-256 against the release checksums, and swaps the binary in place.`,
 func runUpdate(cmd *cobra.Command, checkOnly, yes bool) error {
 	out := cmd.OutOrStdout()
 
-	ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Minute)
 	defer cancel()
 
 	res, err := selfupdate.Check(ctx, Version)
 	if err != nil {
 		return err
 	}
+
+	// An explicit `zap update` is also a fresh check, so the background
+	// checker does not go re-ask the API minutes later.
+	cacheUpdateCheck(res)
 
 	if !res.Available {
 		if !res.Current.Valid() {
@@ -72,7 +83,21 @@ func runUpdate(cmd *cobra.Command, checkOnly, yes bool) error {
 	src := selfupdate.Detect(exePath)
 
 	if !src.SelfManaged() {
-		fmt.Fprintf(out, "zap was installed with %s, so it manages the binary.\nRun:\n\n  %s\n", src, src.UpgradeHint())
+		fmt.Fprintf(out, "Installed with %s — running: %s\n\n", src, src.UpgradeHint())
+		if !yes {
+			ok, err := confirm(cmd, "Proceed?")
+			if err != nil {
+				return err
+			}
+			if !ok {
+				fmt.Fprintln(out, "Cancelled.")
+				return nil
+			}
+		}
+		if err := selfupdate.UpgradeViaManager(ctx, src, out, cmd.ErrOrStderr()); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "\n%s finished. Run `zap --version` to confirm.\n", src)
 		return nil
 	}
 
@@ -94,6 +119,18 @@ func runUpdate(cmd *cobra.Command, checkOnly, yes bool) error {
 	}
 	fmt.Fprintf(out, "Updated to %s.\n", res.Release.TagName)
 	return nil
+}
+
+// cacheUpdateCheck stores a successful check so the TUI's background checker
+// can stay quiet for the next 24 hours. Failures to persist are ignored: a
+// missed cache write costs one extra API call, which is not worth an error.
+func cacheUpdateCheck(res *selfupdate.Result) {
+	st, err := state.Load()
+	if err != nil || st == nil {
+		return
+	}
+	st.RecordUpdateCheck(time.Now(), res.Release.TagName, res.Release.HTMLURL)
+	_ = st.Save()
 }
 
 // confirm asks a y/N question on the command's input stream.
