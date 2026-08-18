@@ -11,7 +11,7 @@ import (
 	"github.com/Ryoshkenn/zap/internal/ui"
 )
 
-var Version = "v1.2.0"
+var Version = "v1.2.1"
 
 // NewRootCmd builds the cobra root with all subcommands wired in.
 func NewRootCmd() *cobra.Command {
