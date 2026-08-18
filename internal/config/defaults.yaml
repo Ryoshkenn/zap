@@ -43,6 +43,16 @@ providers:
         label: "Dangerously skip permissions"
         flag: "--dangerously-skip-permissions"
         default: true
+  - id: kimi
+    name: Kimi CLI
+    command: kimi
+    icon: "🌙"
+    install_hint: "curl -LsSf https://code.kimi.com/install.sh | bash"
+    flags:
+      - id: yolo
+        label: "YOLO mode (auto-approve all tool actions)"
+        flag: "--yolo"
+        default: false
   - id: cursor
     name: Cursor
     command: cursor
@@ -50,13 +60,6 @@ providers:
     launch_mode: app
     app_bundle: "Cursor"
     install_hint: "Download from https://cursor.com"
-  - id: windsurf
-    name: Windsurf
-    command: windsurf
-    icon: "🏄"
-    launch_mode: app
-    app_bundle: "Windsurf"
-    install_hint: "Download from https://windsurf.com"
   - id: vscode
     name: VS Code
     command: code

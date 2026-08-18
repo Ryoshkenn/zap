@@ -1,6 +1,6 @@
 # zap
 
-A terminal launcher for AI coding CLIs and coding apps. Pick a folder, pick a provider (Claude Code, Codex, Gemini, opencode, Cursor, Windsurf, VS Code…), and zap.
+A terminal launcher for AI coding CLIs and coding apps. Pick a folder, pick a provider (Claude Code, Codex, Gemini, opencode, Kimi, Cursor, VS Code…), and zap.
 
 ```
 Pick a folder                                                                                                             
@@ -63,8 +63,8 @@ zap claude --safe               # remove any default dangerous flags
 zap codex
 zap gemini ~/projects/foo
 zap opencode
+zap kimi --yolo                 # add --yolo (auto-approve all tool actions)
 zap cursor ~/projects/foo
-zap windsurf ~/projects/foo
 zap vscode ~/projects/foo
 ```
 
@@ -139,8 +139,8 @@ Favorites, recents, and per-provider flag preferences are stored at `~/Library/A
 | Codex CLI | `codex` | |
 | Gemini CLI | `gemini` | |
 | opencode | `opencode run` | `--yolo` toggles `--dangerously-skip-permissions` (default: on) |
+| Kimi CLI | `kimi` | `--yolo` toggles `--yolo` (auto-approve all tool actions) |
 | Cursor | `cursor` or `/Applications/Cursor.app` | opens as an app by default |
-| Windsurf | `windsurf` or `/Applications/Windsurf.app` | opens as an app by default |
 | VS Code | `code` or `/Applications/Visual Studio Code.app` | opens as an app by default |
 
 Providers not installed are shown grayed out with an install hint.

@@ -13,8 +13,8 @@ var builtInProviderNames = []string{
 	"Codex CLI",
 	"Gemini CLI",
 	"opencode",
+	"Kimi CLI",
 	"Cursor",
-	"Windsurf",
 	"VS Code",
 }
 

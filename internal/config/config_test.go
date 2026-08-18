@@ -9,7 +9,7 @@ func TestEmbeddedDefaultsParse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	wantIDs := []string{"claude", "codex", "gemini", "opencode"}
+	wantIDs := []string{"claude", "codex", "gemini", "opencode", "kimi"}
 	for _, id := range wantIDs {
 		if cfg.FindProvider(id) == nil {
 			t.Errorf("expected provider %q in defaults", id)
