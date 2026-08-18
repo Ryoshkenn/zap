@@ -50,6 +50,7 @@ Run "zap" with no args for the interactive picker, or use subcommands for fast l
 	root.AddCommand(newLastCmd(cfg))
 	root.AddCommand(newDoctorCmd(cfg))
 	root.AddCommand(newUninstallCmd())
+	root.AddCommand(newUpdateCmd())
 
 	// Dynamic per-provider subcommands so `zap claude /path --yolo` works.
 	for _, p := range cfg.Providers {

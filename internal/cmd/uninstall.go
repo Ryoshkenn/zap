@@ -4,13 +4,13 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/Ryoshkenn/zap/internal/config"
+	"github.com/Ryoshkenn/zap/internal/selfupdate"
 )
 
 // newUninstallCmd builds `zap uninstall`: remove zap from this computer.
@@ -50,16 +50,17 @@ func runUninstall(purge, yes bool, in interface{ Read([]byte) (int, error) }) er
 		exePath = resolved
 	}
 
-	mgr, hint := detectManager(exePath)
+	src := selfupdate.Detect(exePath)
+	managed := !src.SelfManaged()
 
 	// Gather the user-data dir (config and state share one dir).
 	dataDir, _ := config.ConfigDir()
 
 	// Show the plan.
 	fmt.Println("zap uninstall plan:")
-	if mgr != "" {
-		fmt.Printf("  • binary: managed by %s — will NOT be deleted by zap\n", mgr)
-		fmt.Printf("           run: %s\n", hint)
+	if managed {
+		fmt.Printf("  • binary: managed by %s — will NOT be deleted by zap\n", src)
+		fmt.Printf("           run: %s\n", uninstallHint(src))
 	} else {
 		fmt.Printf("  • binary: %s  (will be removed)\n", exePath)
 	}
@@ -91,8 +92,8 @@ func runUninstall(purge, yes bool, in interface{ Read([]byte) (int, error) }) er
 		}
 	}
 
-	if mgr != "" {
-		fmt.Printf("\nNow run: %s\n", hint)
+	if managed {
+		fmt.Printf("\nNow run: %s\n", uninstallHint(src))
 		return nil
 	}
 
@@ -106,28 +107,15 @@ func runUninstall(purge, yes bool, in interface{ Read([]byte) (int, error) }) er
 // detectManager guesses how zap was installed from its binary path. It returns
 // a manager name and the command the user should run, or ("", "") when zap
 // appears to be a standalone (go-install or manually placed) binary.
-func detectManager(exePath string) (manager, hint string) {
-	lower := strings.ToLower(exePath)
-	switch {
-	case strings.Contains(lower, "/cellar/") || strings.Contains(lower, "/homebrew/") || brewOwns(exePath):
-		return "Homebrew", "brew uninstall zap"
-	case strings.Contains(lower, "scoop"):
-		return "Scoop", "scoop uninstall zap"
-	}
-	return "", ""
-}
 
-// brewOwns reports whether `brew --prefix zap` resolves, indicating Homebrew
-// tracks this formula. Best-effort: any error means "not brew".
-func brewOwns(exePath string) bool {
-	brew, err := exec.LookPath("brew")
-	if err != nil {
-		return false
+// uninstallHint is the package-manager command that removes zap. It is the
+// uninstall counterpart to Source.UpgradeHint.
+func uninstallHint(src selfupdate.Source) string {
+	switch src {
+	case selfupdate.SourceHomebrew:
+		return "brew uninstall zap"
+	case selfupdate.SourceScoop:
+		return "scoop uninstall zap"
 	}
-	out, err := exec.Command(brew, "--prefix", "zap").Output()
-	if err != nil {
-		return false
-	}
-	prefix := strings.TrimSpace(string(out))
-	return prefix != "" && strings.HasPrefix(exePath, prefix)
+	return ""
 }
