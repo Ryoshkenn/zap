@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -180,14 +181,19 @@ func TestResolveFlagsIncludesDeclaredDefaults(t *testing.T) {
 }
 
 func TestUnexpandHome(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := filepath.Clean(t.TempDir())
+	old := userHomeDir
+	userHomeDir = func() (string, error) { return home, nil }
+	t.Cleanup(func() { userHomeDir = old })
+
+	sep := string(filepath.Separator)
 	cases := map[string]string{
-		home:                 "~",
-		home + "/api":        "~/api",
-		"/srv/app":           "/srv/app",
-		"~/already":          "~/already",
-		home + "sibling/api": home + "sibling/api",
+		home:                           "~",
+		home + "/api":                  "~/api",
+		home + sep + "api" + sep + "x": "~/api/x",
+		"/srv/app":                     "/srv/app",
+		"~/already":                    "~/already",
+		home + "sibling/api":           home + "sibling/api",
 	}
 	for in, want := range cases {
 		if got := unexpandHome(in); got != want {

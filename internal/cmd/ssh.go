@@ -151,16 +151,22 @@ func rememberRemoteLaunch(s *state.State, target, shell, dir, providerID string,
 // local shell (/Users/me/api), which rarely exists on the remote; the user
 // meant the remote home.
 func unexpandHome(dir string) string {
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil || home == "" || home == "/" {
 		return dir
 	}
 	home = filepath.Clean(home)
-	switch {
-	case dir == home:
+	if dir == home {
 		return "~"
-	case strings.HasPrefix(dir, home+"/"):
-		return "~/" + strings.TrimPrefix(dir, home+"/")
+	}
+	// Accept either separator: Windows shells hand us C:\Users\me\api.
+	for _, sep := range []string{"/", string(filepath.Separator)} {
+		if rest, ok := strings.CutPrefix(dir, home+sep); ok {
+			return "~/" + filepath.ToSlash(rest) // the remote path is POSIX
+		}
 	}
 	return dir
 }
+
+// userHomeDir is os.UserHomeDir, swappable in tests (Windows ignores $HOME).
+var userHomeDir = os.UserHomeDir
