@@ -21,11 +21,11 @@ const apiKey = "phc_s78CWSGJWigdMEykv6RVYJkTrnkFE2Nf9c4Fs2BLcokp"
 const batchEndpoint = "https://us.i.posthog.com/batch/"
 
 var (
-	installID   string
-	zapVersion  string
-	disabled    bool
-	pending     []phEvent
-	mu          sync.Mutex
+	installID    string
+	zapVersion   string
+	disabled     bool
+	pending      []phEvent
+	mu           sync.Mutex
 	shutdownOnce sync.Once
 )
 

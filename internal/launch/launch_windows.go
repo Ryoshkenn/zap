@@ -6,16 +6,19 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+
+	"github.com/Ryoshkenn/zap/internal/config"
 )
 
 // Open launches command as a detached GUI app, passing dir as the first argument.
 // appBundlePath is ignored on Windows (macOS-only concept).
 func Open(dir, command string, args []string, appBundlePath string) error {
-	binPath, err := exec.LookPath(command)
+	bin, baseArgs := config.SplitCommand(command)
+	binPath, err := exec.LookPath(bin)
 	if err != nil {
-		return fmt.Errorf("%s: not found on PATH", command)
+		return fmt.Errorf("%s: not found on PATH", bin)
 	}
-	all := append([]string{dir}, args...)
+	all := append(append([]string{dir}, baseArgs...), args...)
 	cmd := exec.Command(binPath, all...)
 	return cmd.Start()
 }
@@ -45,11 +48,13 @@ func ExecSSH(target, remoteDir, command string, args []string, shell string) err
 // Exec runs command + args in dir, forwarding stdio. zap remains as parent.
 // On Windows there's no true exec; we wait for completion and forward the exit code.
 func Exec(dir, command string, args []string, env []string) error {
-	binPath, err := exec.LookPath(command)
+	bin, baseArgs := config.SplitCommand(command)
+	binPath, err := exec.LookPath(bin)
 	if err != nil {
-		return fmt.Errorf("%s: not found on PATH", command)
+		return fmt.Errorf("%s: not found on PATH", bin)
 	}
-	cmd := exec.Command(binPath, args...)
+	fullArgs := append(append([]string(nil), baseArgs...), args...)
+	cmd := exec.Command(binPath, fullArgs...)
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

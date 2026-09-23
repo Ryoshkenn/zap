@@ -236,12 +236,9 @@ func (m *modelPickerModel) advanceCursor(dir int) {
 
 // listViewportHeight returns how many item rows fit on screen for the list.
 func (m *modelPickerModel) listViewportHeight() int {
-	// Fixed overhead: title(1) + blank(1) + search(1) + blank(1) + help(1) = 5
-	h := m.app.height - 5
-	if h < 4 {
-		h = 4
-	}
-	return h
+	// Overhead: title + blank, search + blank, scroll hint, help (2), plus up
+	// to two blank lines the list inserts above section headers.
+	return m.app.bodyHeight(9)
 }
 
 // clampScroll adjusts scrollOffset so cursor stays within the viewport.

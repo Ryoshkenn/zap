@@ -24,7 +24,7 @@ type ModelKind int
 
 const (
 	KindPull  ModelKind = iota // must be pulled/downloaded locally first
-	KindCloud                   // runs on Ollama's hosted infrastructure; requires `ollama signin` (an Ollama account)
+	KindCloud                  // runs on Ollama's hosted infrastructure; requires `ollama signin` (an Ollama account)
 )
 
 // KnownModel is an entry in the curated model catalogue.

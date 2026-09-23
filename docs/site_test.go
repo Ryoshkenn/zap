@@ -11,9 +11,10 @@ import (
 var builtInProviderNames = []string{
 	"Claude Code",
 	"Codex CLI",
-	"Gemini CLI",
 	"opencode",
-	"Kimi CLI",
+	"Kimi Code",
+	"Command Code",
+	"Gemini CLI",
 	"Cursor",
 	"VS Code",
 }

@@ -91,6 +91,14 @@ func (a *app) applyUpdateCheck(msg updateCheckedMsg) {
 	_ = a.state.Save()
 }
 
+// bannerHeight is the number of rows updateBanner occupies.
+func (a *app) bannerHeight() int {
+	if a.updateBanner() == "" {
+		return 0
+	}
+	return 2
+}
+
 // updateBanner is the one-line "update available" notice shown under every
 // screen. It returns "" when there is nothing to say, so screens that are
 // already full do not lose a row to an empty banner.

@@ -1,12 +1,12 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/Ryoshkenn/zap/internal/launch"
 	"github.com/Ryoshkenn/zap/internal/sshconf"
 	"github.com/Ryoshkenn/zap/internal/state"
 )
@@ -14,6 +14,7 @@ import (
 // hostEntry is one row in the remote-host picker.
 type hostEntry struct {
 	label  string
+	detail string // dim second line, e.g. the target behind an alias
 	target string
 	shell  string
 	action string // "" => a host; "add" => the "add a computer" action
@@ -27,7 +28,14 @@ func buildHostEntries(saved []state.SSHHost, confHosts []string) []hostEntry {
 	seen := map[string]bool{}
 	for _, h := range saved {
 		seen[h.Target] = true
-		out = append(out, hostEntry{label: "💻 " + h.Label(), target: h.Target, shell: h.Shell})
+		e := hostEntry{label: "💻 " + h.Label(), target: h.Target, shell: h.Shell}
+		if h.Label() != h.Target {
+			e.detail = h.Target
+		}
+		if h.Shell != "" {
+			e.detail = strings.TrimSpace(e.detail + "  shell: " + h.Shell)
+		}
+		out = append(out, e)
 	}
 	for _, c := range confHosts {
 		if seen[c] {
@@ -45,6 +53,7 @@ type hostModel struct {
 	app     *app
 	entries []hostEntry
 	cursor  int
+	offset  int
 }
 
 func newHostModel(a *app) *hostModel {
@@ -101,21 +110,30 @@ func (m *hostModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *hostModel) View() string {
 	var b strings.Builder
+	w, _ := m.app.size()
 	b.WriteString(titleStyle.Render("SSH / Remote — pick a computer"))
 	b.WriteString("\n\n")
-	for i, e := range m.entries {
+	// Overhead: title, blank, scroll hint, help (2). Detail lines make rows
+	// uneven, so the window is measured in entries, budgeting two rows each.
+	rows := m.app.bodyHeight(5) / 2
+	start, end := scrollWindow(m.offset, m.cursor, len(m.entries), rows)
+	m.offset = start
+	for i := start; i < end; i++ {
+		e := m.entries[i]
 		marker := "  "
 		label := e.label
 		if i == m.cursor {
 			marker = highlightStyle.Render("▸ ")
 			label = highlightStyle.Render(label)
 		}
-		fmt.Fprintf(&b, "%s%s\n", marker, label)
-		if e.action == "" && e.target != e.label {
-			fmt.Fprintf(&b, "    %s\n", mutedStyle.Render(e.target))
+		b.WriteString(truncate(marker+label, w) + "\n")
+		if e.detail != "" {
+			b.WriteString(truncate("    "+mutedStyle.Render(e.detail), w) + "\n")
 		}
 	}
-	b.WriteString("\n")
+	if hint := scrollHint(start, end, len(m.entries)); hint != "" {
+		b.WriteString("  " + hintStyle.Render(hint) + "\n")
+	}
 	b.WriteString(helpStyle.Render("↑/↓ move · enter select · d forget host · esc back · ctrl+c quit"))
 	return b.String()
 }
@@ -124,6 +142,7 @@ func (m *hostModel) View() string {
 type addHostModel struct {
 	app *app
 	ti  textinput.Model
+	err error
 }
 
 func newAddHostModel(a *app) *addHostModel {
@@ -145,6 +164,10 @@ func (m *addHostModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if target == "" {
 				return m.app, nil
 			}
+			if err := launch.ValidateSSHTarget(target); err != nil {
+				m.err = err
+				return m.app, nil
+			}
 			return m.app, m.app.enterRemote(target, "")
 		case "esc":
 			return m.app, m.app.gotoHost()
@@ -152,6 +175,9 @@ func (m *addHostModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	m.ti, cmd = m.ti.Update(msg)
+	if _, ok := msg.(tea.KeyMsg); ok {
+		m.err = nil
+	}
 	return m.app, cmd
 }
 
@@ -162,7 +188,12 @@ func (m *addHostModel) View() string {
 	b.WriteString("  SSH target (an alias from ~/.ssh/config, or user@host):\n\n  ")
 	b.WriteString(m.ti.View())
 	b.WriteString("\n\n")
+	if m.err != nil {
+		b.WriteString("  " + errorStyle.Render(m.err.Error()) + "\n")
+	}
 	b.WriteString(hintStyle.Render("  zap connects with your normal ssh keys/config — no passwords stored."))
+	b.WriteString("\n")
+	b.WriteString(hintStyle.Render("  Non-standard port? Use ssh://user@host:2222 or a Host entry in ~/.ssh/config."))
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render("enter connect · esc back"))
 	return b.String()
@@ -175,6 +206,7 @@ type remoteFolderModel struct {
 	app       *app
 	entries   []remoteFolderEntry
 	cursor    int
+	offset    int
 	inputting bool
 	ti        textinput.Model
 }
@@ -194,7 +226,7 @@ func newRemoteFolderModel(a *app) *remoteFolderModel {
 		entries = append(entries, remoteFolderEntry{label: "🕘 " + r.Path, path: r.Path})
 	}
 	entries = append(entries, remoteFolderEntry{label: "🏠 Home (~)", path: "~"})
-	entries = append(entries, remoteFolderEntry{label: "✏️  Enter a path…", action: "input"})
+	entries = append(entries, remoteFolderEntry{label: "📝 Enter a path…", action: "input"})
 
 	ti := textinput.New()
 	ti.Placeholder = "~/projects/api"
@@ -268,16 +300,22 @@ func (m *remoteFolderModel) View() string {
 		return b.String()
 	}
 
-	for i, e := range m.entries {
+	w, _ := m.app.size()
+	start, end := scrollWindow(m.offset, m.cursor, len(m.entries), m.app.bodyHeight(5))
+	m.offset = start
+	for i := start; i < end; i++ {
+		e := m.entries[i]
 		marker := "  "
 		label := e.label
 		if i == m.cursor {
 			marker = highlightStyle.Render("▸ ")
 			label = highlightStyle.Render(label)
 		}
-		fmt.Fprintf(&b, "%s%s\n", marker, label)
+		b.WriteString(truncate(marker+label, w) + "\n")
 	}
-	b.WriteString("\n")
+	if hint := scrollHint(start, end, len(m.entries)); hint != "" {
+		b.WriteString("  " + hintStyle.Render(hint) + "\n")
+	}
 	b.WriteString(helpStyle.Render("↑/↓ move · enter select · esc back · ctrl+c quit"))
 	return b.String()
 }

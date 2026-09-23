@@ -1,29 +1,26 @@
 # zap
 
-A terminal launcher for AI coding CLIs and coding apps. Pick a folder, pick a provider (Claude Code, Codex, Gemini, opencode, Kimi, Cursor, VS Code…), and zap.
+A terminal launcher for AI coding CLIs and coding apps. Pick a folder, pick a provider (Claude Code, Codex, opencode, Kimi Code, Command Code, Gemini, Cursor, VS Code…), and zap.
 
 ```
-Pick a folder                                                                                                             
-                                                                                                                             
-│ ⭐ ~/Documents/code                                                                                                        
-│ /Users/user/Documents/                                                                                        
-  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────-                                                                                                                           
-  🕘 ~                                                                                                                       
-  /Users/user                                                                                                       
-  🕘 ~/Documents/code                                                                                     
-  /Users/user/Documents/code                                                                  
-  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-                                                                                                                             
-  📁 Current: ~/Documents/code/zap                                                                                           
-  /Users/user/Documents/code/zap                                                                                    
-  ➜  Browse folders…                                                                                                         
-                                                                                                                             
-  ⚙  Settings…
+  Pick a folder
+
+▸ 📁 ~/Documents/code/zap  current
+  ────────────────────────────────
+  ⭐ ~/Documents/code
+  🕘 ~/work/api-server
+  🕘 ~/projects/notes
+  ────────────────────────────────
+  🔎 Browse folders…
+  🌐 SSH / Remote…
+  🔧 Settings…
+
+  ↑/↓ move · enter select · / filter · f star/unstar · i settings · q quit
 ```
 
 ## Why
 
-If you bounce between Claude Code, Codex, Gemini, and opencode across many repos, you spend a surprising amount of time typing `cd ~/projects/foo && claude --dangerously-skip-permissions`. zap collapses that into one keystroke.
+If you bounce between Claude Code, Codex, opencode, Kimi, and Command Code across many repos, you spend a surprising amount of time typing `cd ~/projects/foo && claude --dangerously-skip-permissions`. zap collapses that into one keystroke.
 
 ## Install
 
@@ -52,7 +49,7 @@ Grab a release archive from [GitHub Releases](https://github.com/Ryoshkenn/zap/r
 ```sh
 zap
 ```
-Pick a folder (favorites → recents → current → browse), pick a provider, optionally toggle flags, launch.
+Pick a folder (current directory → favorites → recents → browse), pick a provider, launch. Per-provider flags are set once in Settings.
 
 ### Fast non-interactive
 ```sh
@@ -61,9 +58,10 @@ zap claude /path/to/repo        # launch Claude in /path/to/repo
 zap claude --yolo               # add --dangerously-skip-permissions
 zap claude --safe               # remove any default dangerous flags
 zap codex
+zap opencode                    # runs with --auto by default (--safe to drop it)
+zap kimi --yolo                 # add --yolo (auto-approve tool calls)
+zap commandcode --yolo          # Command Code, bypassing permission prompts
 zap gemini ~/projects/foo
-zap opencode
-zap kimi --yolo                 # add --yolo (auto-approve all tool actions)
 zap cursor ~/projects/foo
 zap vscode ~/projects/foo
 ```
@@ -80,13 +78,16 @@ zap ssh devbox                  # open a shell on devbox
 zap ssh devbox claude           # launch Claude in ~ on devbox
 zap ssh me@host claude ~/api    # launch Claude in ~/api on me@host
 zap ssh devbox codex --print    # show the ssh command without running it
-zap ssh devbox claude --shell zsh   # use zsh as the remote login shell
+zap ssh devbox claude --shell zsh   # force zsh instead of your remote login shell
 ```
 
 zap connects with your normal ssh keys and `~/.ssh/config` — it stores no
-passwords. The remote command runs inside a login shell (`bash -lc` by default)
-so the provider resolves on the remote `PATH`; if your remote uses a different
-shell, pass `--shell zsh` (it's remembered per host).
+passwords. The remote command runs in your remote login shell, started as a
+login + interactive shell (`$SHELL -lic`), so PATH set up in `~/.profile`,
+`~/.bashrc` or `~/.zshrc` (nvm, bun, `~/.local/bin`…) is picked up. A path under
+your local home (an unquoted `~/api` your local shell already expanded) is sent
+as `~/api` so it resolves on the remote. To force a specific shell, pass
+`--shell zsh` (it's remembered per host).
 
 ### Favorites
 ```sh
@@ -156,11 +157,12 @@ Favorites, recents, and per-provider flag preferences are stored at `~/Library/A
 | Provider | Command | Notes |
 |---|---|---|
 | Claude Code | `claude` | `--yolo` toggles `--dangerously-skip-permissions` |
-| Codex CLI | `codex` | |
-| Gemini CLI | `gemini` | |
-| opencode | `opencode run` | `--yolo` toggles `--dangerously-skip-permissions` (default: on) |
-| Kimi CLI | `kimi` | `--yolo` toggles `--yolo` (auto-approve all tool actions) |
-| Cursor | `cursor` or `/Applications/Cursor.app` | opens as an app by default |
+| Codex CLI | `codex` | `--yolo` toggles `--dangerously-bypass-approvals-and-sandbox`; Settings also offers `--approve-for-me` |
+| opencode | `opencode` | `--yolo` toggles `--auto` (default: on) |
+| Kimi Code | `kimi` | `--yolo` toggles `--yolo`; Settings also offers `--auto` |
+| Command Code | `command-code` | `--yolo` toggles `--yolo`; Settings also offers `--accept-edits` and `--trust` |
+| Gemini CLI | `gemini` | `--yolo` toggles `--yolo` |
+| Cursor | `/Applications/Cursor.app` or `cursor` | opens as an app by default; an installed app wins over a `cursor` CLI shim |
 | VS Code | `code` or `/Applications/Visual Studio Code.app` | opens as an app by default |
 
 Providers not installed are shown grayed out with an install hint.

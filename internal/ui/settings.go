@@ -17,6 +17,7 @@ type settingsModel struct {
 	app    *app
 	rows   []settingsRow
 	cursor int
+	offset int // first visible row when the list is taller than the screen
 	dirty  bool
 	// updateStatus is the result of a manual "check now", shown inline.
 	updateStatus string
@@ -80,6 +81,7 @@ func (m *settingsModel) rebuild() {
 		}
 
 		saved, hasSaved := m.app.state.PreferredFlagsFor(p.ID)
+		saved = p.NormalizeFlags(saved)
 		for _, f := range p.Flags {
 			on := f.Default
 			for _, df := range p.DefaultFlags {
@@ -109,7 +111,7 @@ func (m *settingsModel) rebuild() {
 func (m *settingsModel) appendUpdateRows() {
 	m.rows = append(m.rows, settingsRow{
 		isHeader: true,
-		label:    "⬆  Updates  " + mutedStyle.Render("(zap "+Version+")"),
+		label:    "🔄 Updates  " + mutedStyle.Render("(zap "+Version+")"),
 	})
 
 	m.rows = append(m.rows, settingsRow{
@@ -240,11 +242,24 @@ func (m *settingsModel) View() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Settings"))
 	b.WriteString("\n")
-	b.WriteString(subtleStyle.Render("  These persist across launches. Override per-run with `zap <provider> --safe`."))
+	w, _ := m.app.size()
+	b.WriteString(truncate(subtleStyle.Render("  These persist across launches. Override per-run with `zap <provider> --safe`."), w))
 	b.WriteString("\n\n")
-	for i, r := range m.rows {
+	// Overhead: title, subtitle, blank, scroll hint, help (2).
+	height := m.app.bodyHeight(6)
+	start, end := scrollWindow(m.offset, m.cursor, len(m.rows), height)
+	// Scrolling up onto a provider's first row: bring its header into view.
+	if c := m.cursor - 1; c >= 0 && c < start && m.rows[c].isHeader {
+		start, end = c, c+height
+		if end > len(m.rows) {
+			end = len(m.rows)
+		}
+	}
+	m.offset = start
+	for i := start; i < end; i++ {
+		r := m.rows[i]
 		if r.isHeader {
-			b.WriteString("  " + r.label + "\n")
+			b.WriteString(truncate("  "+r.label, w) + "\n")
 			continue
 		}
 		marker := "    "
@@ -252,24 +267,35 @@ func (m *settingsModel) View() string {
 			marker = "  " + highlightStyle.Render("▸ ")
 		}
 		if r.isModelSelect {
-			b.WriteString(marker + highlightStyle.Render("[→]") + " " + r.label + "\n")
+			b.WriteString(truncate(marker+highlightStyle.Render("[→]")+" "+r.label, w) + "\n")
 			continue
 		}
 		if r.isUpdateCheck {
-			b.WriteString(marker + highlightStyle.Render("[→]") + " " + r.label)
+			line := marker + highlightStyle.Render("[→]") + " " + r.label
 			if m.updateStatus != "" {
-				b.WriteString("  " + hintStyle.Render(m.updateStatus))
+				line += "  " + hintStyle.Render(m.updateStatus)
 			}
-			b.WriteString("\n")
+			b.WriteString(truncate(line, w) + "\n")
 			continue
 		}
 		check := "[ ]"
 		if r.on {
 			check = highlightStyle.Render("[x]")
 		}
-		b.WriteString(marker + check + " " + r.label + "\n")
+		b.WriteString(truncate(marker+check+" "+r.label, w) + "\n")
 	}
-	b.WriteString("\n")
+	if hint := scrollHint(start, end, len(m.rows)); hint != "" {
+		b.WriteString("  " + hintStyle.Render(hint) + "\n")
+	}
 	b.WriteString(helpStyle.Render("↑/↓ move · space/enter toggle · esc back · q quit"))
 	return b.String()
+}
+
+func containsStr(ss []string, s string) bool {
+	for _, x := range ss {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }

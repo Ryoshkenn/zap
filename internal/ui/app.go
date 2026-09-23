@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/Ryoshkenn/zap/internal/config"
@@ -19,7 +20,6 @@ const (
 	screenFolder screen = iota
 	screenBrowse
 	screenProvider
-	screenFlags
 	screenSettings
 	screenModelPicker
 	screenHost
@@ -36,7 +36,6 @@ type app struct {
 	folder       *folderModel
 	browse       *browseModel
 	provider     *providerModel
-	flagsModel   *flagsModel
 	settings     *settingsModel
 	modelPicker  *modelPickerModel
 	host         *hostModel
@@ -184,17 +183,16 @@ func (a *app) Init() tea.Cmd {
 func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if wm, ok := msg.(tea.WindowSizeMsg); ok {
 		a.width, a.height = wm.Width, wm.Height
+		a.resize()
+		return a, nil
 	}
 	if um, ok := msg.(updateCheckedMsg); ok {
 		a.applyUpdateCheck(um)
+		a.resize() // the banner may have just appeared
 		// Fall through: Settings shows the outcome of a manual check.
 	}
 	if km, ok := msg.(tea.KeyMsg); ok {
-		// 'q' must not quit on screens that capture text input or use 'q'
-		// for navigation within a sub-list.
-		typing := a.screen == screenBrowse || a.screen == screenModelPicker ||
-			a.screen == screenAddHost || a.screen == screenRemoteFolder
-		if km.String() == "ctrl+c" || (km.String() == "q" && !typing) {
+		if km.String() == "ctrl+c" || (km.String() == "q" && !a.typing()) {
 			return a, tea.Quit
 		}
 	}
@@ -206,8 +204,6 @@ func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.browse.Update(msg)
 	case screenProvider:
 		return a.provider.Update(msg)
-	case screenFlags:
-		return a.flagsModel.Update(msg)
 	case screenSettings:
 		return a.settings.Update(msg)
 	case screenModelPicker:
@@ -222,8 +218,22 @@ func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+// typing reports whether the current screen is capturing text, so 'q' must
+// reach it as a character instead of quitting.
+func (a *app) typing() bool {
+	switch a.screen {
+	case screenBrowse, screenModelPicker, screenAddHost, screenRemoteFolder:
+		return true
+	case screenFolder:
+		return a.folder.list.FilterState() == list.Filtering
+	case screenProvider:
+		return a.provider.list.FilterState() == list.Filtering
+	}
+	return false
+}
+
 func (a *app) View() string {
-	return a.screenView() + a.updateBanner()
+	return clipLines(a.screenView()+a.updateBanner(), a.width)
 }
 
 func (a *app) screenView() string {
@@ -234,8 +244,6 @@ func (a *app) screenView() string {
 		return a.browse.View()
 	case screenProvider:
 		return a.provider.View()
-	case screenFlags:
-		return a.flagsModel.View()
 	case screenSettings:
 		return a.settings.View()
 	case screenModelPicker:
@@ -311,7 +319,9 @@ func (a *app) gotoBrowse() tea.Cmd {
 	return a.browse.init()
 }
 
-func (a *app) gotoFlags(st *detect.Status) tea.Cmd {
+// launchSelected launches the chosen provider with its saved flags (or its
+// defaults). Flags are configured in Settings, so there is no per-launch step.
+func (a *app) launchSelected(st *detect.Status) tea.Cmd {
 	a.chosenProvider = st
 	if st.Provider.ModelSelector {
 		// Model selection lives in Settings now. Launch straight away with the
@@ -325,24 +335,12 @@ func (a *app) gotoFlags(st *detect.Status) tea.Cmd {
 		copy.Provider.DefaultFlags = nil
 		return a.launch(&copy, []string{"run", model})
 	}
-	// Apply saved preferred flags if present, otherwise use defaults — skip the
-	// flags picker screen entirely (flags are configurable in Settings).
+	// Apply saved preferred flags if present, otherwise use defaults.
 	var extra []string
 	if saved, ok := a.state.PreferredFlagsFor(st.Provider.ID); ok {
-		extra = saved
+		extra = st.Provider.NormalizeFlags(saved)
 	} else {
-		for _, f := range st.Provider.Flags {
-			flag := f.Flag
-			on := f.Default
-			for _, df := range st.Provider.DefaultFlags {
-				if df == flag {
-					on = true
-				}
-			}
-			if on {
-				extra = append(extra, flag)
-			}
-		}
+		extra = st.Provider.DefaultFlagSet()
 	}
 	copy := *st
 	copy.Provider.DefaultFlags = nil

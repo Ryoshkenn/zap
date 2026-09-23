@@ -74,7 +74,7 @@ release:
   header: |
     ## zap {{ .Tag }}
 
-    Terminal launcher for AI coding CLIs — Claude, Codex, Gemini, opencode, and friends.
+    Terminal launcher for AI coding CLIs — Claude, Codex, opencode, Kimi, Command Code, and friends.
 
     ### Install
     ```sh

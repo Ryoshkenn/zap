@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"strings"
 )
@@ -36,4 +37,9 @@ func shellJoin(parts []string) string {
 		out[i] = shellArg(p)
 	}
 	return strings.Join(out, " ")
+}
+
+// printSSH prints an ssh invocation (argv without the binary) for --print.
+func printSSH(args []string) {
+	fmt.Println(shellJoin(append([]string{"ssh"}, args...)))
 }

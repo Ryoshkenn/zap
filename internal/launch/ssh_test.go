@@ -15,33 +15,40 @@ func TestBuildRemoteCommand(t *testing.T) {
 			name:    "tilde dir preserves home expansion",
 			dir:     "~/proj",
 			command: "claude",
-			want:    `bash -lc 'cd ~/'\''proj'\'' && exec '\''claude'\'''`,
+			want:    `exec "$SHELL" -lic 'cd ~/'\''proj'\'' && exec '\''claude'\'''`,
 		},
 		{
 			name:    "bare tilde",
 			dir:     "~",
 			command: "codex",
-			want:    `bash -lc 'cd ~ && exec '\''codex'\'''`,
+			want:    `exec "$SHELL" -lic 'cd ~ && exec '\''codex'\'''`,
 		},
 		{
 			name:    "absolute dir is fully quoted",
 			dir:     "/srv/app",
 			command: "gemini",
-			want:    `bash -lc 'cd '\''/srv/app'\'' && exec '\''gemini'\'''`,
+			want:    `exec "$SHELL" -lic 'cd '\''/srv/app'\'' && exec '\''gemini'\'''`,
 		},
 		{
 			name:    "args are quoted",
 			dir:     "~/x",
 			command: "claude",
 			args:    []string{"--dangerously-skip-permissions"},
-			want:    `bash -lc 'cd ~/'\''x'\'' && exec '\''claude'\'' '\''--dangerously-skip-permissions'\'''`,
+			want:    `exec "$SHELL" -lic 'cd ~/'\''x'\'' && exec '\''claude'\'' '\''--dangerously-skip-permissions'\'''`,
+		},
+		{
+			name:    "command with base args quotes each word",
+			dir:     "~",
+			command: "opencode run",
+			args:    []string{"--auto"},
+			want:    `exec "$SHELL" -lic 'cd ~ && exec '\''opencode'\'' '\''run'\'' '\''--auto'\'''`,
 		},
 		{
 			name:    "custom shell",
 			dir:     "",
 			command: "opencode",
 			shell:   "zsh",
-			want:    `zsh -lc 'exec '\''opencode'\'''`,
+			want:    `exec zsh -lic 'exec '\''opencode'\'''`,
 		},
 	}
 	for _, tt := range tests {
@@ -65,5 +72,18 @@ func TestSSHArgsWithCommand(t *testing.T) {
 	got := SSHArgs("me@host", "~", "claude", nil, "")
 	if len(got) != 3 || got[0] != "-t" || got[1] != "me@host" {
 		t.Fatalf("unexpected args: %v", got)
+	}
+}
+
+func TestValidateSSHTarget(t *testing.T) {
+	for _, ok := range []string{"devbox", "me@10.0.0.5", "ssh://me@host:2222"} {
+		if err := ValidateSSHTarget(ok); err != nil {
+			t.Errorf("%q should be valid: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"", "-oProxyCommand=x", "me@host claude", "a\tb"} {
+		if err := ValidateSSHTarget(bad); err == nil {
+			t.Errorf("%q should be rejected", bad)
+		}
 	}
 }

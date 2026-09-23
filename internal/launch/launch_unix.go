@@ -7,21 +7,25 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+
+	"github.com/Ryoshkenn/zap/internal/config"
 )
 
 // Exec changes directory to dir and replaces the current process with command + args.
 // On Unix this uses syscall.Exec — zap disappears and the target CLI owns the TTY.
 func Exec(dir, command string, args []string, env []string) error {
-	binPath, err := exec.LookPath(command)
+	bin, baseArgs := config.SplitCommand(command)
+	binPath, err := exec.LookPath(bin)
 	if err != nil {
-		return fmt.Errorf("%s: not found on PATH", command)
+		return fmt.Errorf("%s: not found on PATH", bin)
 	}
 	if dir != "" {
 		if err := os.Chdir(dir); err != nil {
 			return fmt.Errorf("chdir %s: %w", dir, err)
 		}
 	}
-	argv := append([]string{binPath}, args...)
+	fullArgs := append(append([]string(nil), baseArgs...), args...)
+	argv := append([]string{binPath}, fullArgs...)
 	if env == nil {
 		env = os.Environ()
 	}
@@ -30,7 +34,7 @@ func Exec(dir, command string, args []string, env []string) error {
 
 // ExecSSH replaces the current process with an ssh session that runs command
 // in remoteDir on target. With an empty command it opens an interactive remote
-// shell. shell selects the remote login shell (default bash). Like Exec, zap
+// shell. shell selects the remote shell (default: the remote login shell). Like Exec, zap
 // disappears and ssh owns the TTY.
 func ExecSSH(target, remoteDir, command string, args []string, shell string) error {
 	sshPath, err := exec.LookPath("ssh")
@@ -51,11 +55,12 @@ func Open(dir, command string, args []string, appBundlePath string) error {
 		cmd := exec.Command("open", all...)
 		return cmd.Start()
 	}
-	binPath, err := exec.LookPath(command)
+	bin, baseArgs := config.SplitCommand(command)
+	binPath, err := exec.LookPath(bin)
 	if err != nil {
-		return fmt.Errorf("%s: not found on PATH", command)
+		return fmt.Errorf("%s: not found on PATH", bin)
 	}
-	all := append([]string{dir}, args...)
+	all := append(append([]string{dir}, baseArgs...), args...)
 	cmd := exec.Command(binPath, all...)
 	return cmd.Start()
 }

@@ -120,7 +120,8 @@ func recordLaunch(s *state.State, dir, providerID string, flags []string, model 
 
 // printLocal renders the resolved local launch as a copy-pasteable command.
 func printLocal(dir, command string, args []string) error {
-	parts := append([]string{command}, args...)
+	bin, baseArgs := config.SplitCommand(command)
+	parts := append(append([]string{bin}, baseArgs...), args...)
 	if dir != "" {
 		fmt.Printf("cd %s && %s\n", shellArg(dir), shellJoin(parts))
 	} else {
@@ -189,16 +190,16 @@ func resolveDir(args []string) (string, error) {
 }
 
 // resolveFlags layers config defaults, saved preferences, and CLI overrides.
-// Priority (highest wins): --safe / --yolo > state.PreferredFlags > p.DefaultFlags.
+// Priority (highest wins): --safe / --yolo > state.PreferredFlags > p.DefaultFlagSet().
 func resolveFlags(p config.Provider, s *state.State, yolo, safe bool) []string {
 	var out []string
 	if s != nil {
 		if saved, ok := s.PreferredFlagsFor(p.ID); ok {
-			out = append(out, saved...)
+			out = append([]string{}, p.NormalizeFlags(saved)...)
 		}
 	}
 	if out == nil {
-		out = append([]string(nil), p.DefaultFlags...)
+		out = p.DefaultFlagSet()
 	}
 
 	yoloFlag := findYoloFlag(p)

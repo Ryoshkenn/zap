@@ -16,43 +16,54 @@ import (
 
 // folderItem implements list.Item.
 type folderItem struct {
+	icon    string
 	label   string
+	tag     string // dim suffix, e.g. "current"
 	path    string // empty => action sentinel
-	section string // "starred", "recent", "current", "browse"
+	section string // "current", "starred", "recent", "browse", "ssh", "settings"
 }
 
-func (i folderItem) Title() string       { return i.label }
-func (i folderItem) Description() string { return i.path }
 func (i folderItem) FilterValue() string { return i.label + " " + i.path }
 
 // separatorItem renders as a horizontal rule between sections.
 type separatorItem struct{}
 
-func (separatorItem) Title() string       { return "" }
-func (separatorItem) Description() string { return "" }
 func (separatorItem) FilterValue() string { return "" }
 
-// folderDelegate wraps DefaultDelegate and renders separatorItems as horizontal rules.
-type folderDelegate struct {
-	base list.DefaultDelegate
-}
+// folderDelegate renders one compact row per item, so favorites, recents and
+// the actions all fit on one page instead of paginating the actions away.
+type folderDelegate struct{}
 
-func (d folderDelegate) Height() int  { return d.base.Height() }
-func (d folderDelegate) Spacing() int { return d.base.Spacing() }
-func (d folderDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
-	return d.base.Update(msg, m)
-}
-func (d folderDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+func (folderDelegate) Height() int                         { return 1 }
+func (folderDelegate) Spacing() int                        { return 0 }
+func (folderDelegate) Update(tea.Msg, *list.Model) tea.Cmd { return nil }
+func (folderDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	width := m.Width()
 	if _, ok := item.(separatorItem); ok {
-		width := m.Width()
-		if width <= 6 {
-			width = 40
+		n := width - 4
+		if n > 60 {
+			n = 60
 		}
-		line := strings.Repeat("─", width-6)
-		fmt.Fprintf(w, "  %s\n", mutedStyle.Render(line))
+		if n < 4 {
+			n = 4
+		}
+		fmt.Fprint(w, "  "+mutedStyle.Render(strings.Repeat("─", n)))
 		return
 	}
-	d.base.Render(w, m, index, item)
+	it, ok := item.(folderItem)
+	if !ok {
+		return
+	}
+	marker, label := "  ", it.label
+	if index == m.Index() {
+		marker = highlightStyle.Render("▸ ")
+		label = highlightStyle.Render(label)
+	}
+	row := marker + it.icon + " " + label
+	if it.tag != "" {
+		row += "  " + hintStyle.Render(it.tag)
+	}
+	fmt.Fprint(w, truncate(row, width))
 }
 
 type folderModel struct {
@@ -61,55 +72,65 @@ type folderModel struct {
 }
 
 func newFolderModel(a *app) *folderModel {
-	items := buildFolderItems(a.state)
-
-	base := list.NewDefaultDelegate()
-	base.SetSpacing(0)
-	base.ShowDescription = true
-
-	l := list.New(items, folderDelegate{base: base}, 80, 22)
+	w, _ := a.size()
+	l := list.New(buildFolderItems(a.state), folderDelegate{}, w, a.listHeight())
 	l.Title = "Pick a folder"
 	l.SetShowStatusBar(false)
+	l.SetShowHelp(false) // zap renders its own help line below the list
 	l.SetFilteringEnabled(true)
 	l.Styles.Title = titleStyle
-
+	l.KeyMap.Quit.SetEnabled(false) // esc/q handling lives in app.Update
 	return &folderModel{app: a, list: l}
 }
 
+// maxFolderRecents caps how many recent folders the picker offers.
+const maxFolderRecents = 4
+
+// buildFolderItems lists the current directory first, then favorites and
+// recents (each folder appears once), then the actions.
 func buildFolderItems(s *state.State) []list.Item {
 	cwd, _ := os.Getwd()
+	shown := map[string]bool{}
+
 	items := []list.Item{}
-
-	hasFavorites := len(s.FavoriteFolders) > 0
-	if hasFavorites {
-		for _, f := range s.FavoriteFolders {
-			items = append(items, folderItem{label: "⭐ " + abbrev(f), path: f, section: "starred"})
+	if cwd != "" {
+		tag := "current"
+		if s.IsFavoriteFolder(cwd) {
+			tag = "current · ⭐"
 		}
+		items = append(items, folderItem{icon: "📁", label: abbrev(cwd), tag: tag, path: cwd, section: "current"})
+		shown[cwd] = true
 	}
 
-	var recentItems []list.Item
-	for _, r := range s.RecentsSorted(4) {
-		// Don't double-list starred folders.
-		if s.IsFavoriteFolder(r.Path) {
-			continue
+	var saved []list.Item
+	for _, f := range s.FavoriteFolders {
+		if !shown[f] {
+			shown[f] = true
+			saved = append(saved, folderItem{icon: "⭐", label: abbrev(f), path: f, section: "starred"})
 		}
-		recentItems = append(recentItems, folderItem{label: "🕘 " + abbrev(r.Path), path: r.Path, section: "recent"})
 	}
-
-	if len(recentItems) > 0 {
-		if hasFavorites {
-			items = append(items, separatorItem{})
+	recents := 0
+	for _, r := range s.RecentsSorted(0) {
+		if recents == maxFolderRecents {
+			break
 		}
-		items = append(items, recentItems...)
+		if !shown[r.Path] {
+			shown[r.Path] = true
+			recents++
+			saved = append(saved, folderItem{icon: "🕘", label: abbrev(r.Path), path: r.Path, section: "recent"})
+		}
+	}
+	if len(saved) > 0 {
 		items = append(items, separatorItem{})
-	} else if hasFavorites {
-		items = append(items, separatorItem{})
+		items = append(items, saved...)
 	}
 
-	items = append(items, folderItem{label: "📁 Current: " + abbrev(cwd), path: cwd, section: "current"})
-	items = append(items, folderItem{label: "➜  Browse folders…", path: "", section: "browse"})
-	items = append(items, folderItem{label: "🌐 SSH / Remote…", path: "", section: "ssh"})
-	items = append(items, folderItem{label: "⚙  Settings…", path: "", section: "settings"})
+	items = append(items,
+		separatorItem{},
+		folderItem{icon: "🔎", label: "Browse folders…", section: "browse"},
+		folderItem{icon: "🌐", label: "SSH / Remote…", section: "ssh"},
+		folderItem{icon: "🔧", label: "Settings…", section: "settings"},
+	)
 	return items
 }
 
@@ -131,23 +152,41 @@ func (m *folderModel) skipSep(from, dir int) {
 	}
 }
 
-func (m *folderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.list.SetSize(msg.Width-2, msg.Height-4)
-	case tea.KeyMsg:
-		// Intercept up/down when not filtering so the cursor skips separator rows.
-		if m.list.FilterState() != list.Filtering {
-			switch msg.String() {
-			case "up", "k":
-				m.skipSep(m.list.Index(), -1)
-				return m.app, nil
-			case "down", "j":
-				m.skipSep(m.list.Index(), 1)
-				return m.app, nil
-			}
+// rebuild refreshes the items after a favorite toggle, keeping the cursor on
+// the same folder.
+func (m *folderModel) rebuild(keep folderItem) {
+	items := buildFolderItems(m.app.state)
+	m.list.SetItems(items)
+	for i, it := range items {
+		if fi, ok := it.(folderItem); ok && fi.path == keep.path && fi.section == keep.section {
+			m.list.Select(i)
+			return
 		}
-		switch msg.String() {
+	}
+	for i, it := range items {
+		if fi, ok := it.(folderItem); ok && fi.path == keep.path {
+			m.list.Select(i)
+			return
+		}
+	}
+}
+
+func (m *folderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if km, ok := msg.(tea.KeyMsg); ok {
+		// While typing a filter every key belongs to the filter input, except
+		// enter, which picks the highlighted match straight away.
+		if m.list.FilterState() == list.Filtering && km.String() != "enter" {
+			var cmd tea.Cmd
+			m.list, cmd = m.list.Update(msg)
+			return m.app, cmd
+		}
+		switch km.String() {
+		case "up", "k":
+			m.skipSep(m.list.Index(), -1)
+			return m.app, nil
+		case "down", "j":
+			m.skipSep(m.list.Index(), 1)
+			return m.app, nil
 		case "enter":
 			sel, ok := m.list.SelectedItem().(folderItem)
 			if !ok {
@@ -164,16 +203,21 @@ func (m *folderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.app, m.app.gotoProvider(sel.path)
 		case "i":
 			return m.app, m.app.gotoSettings()
+		case "esc":
+			// esc clears an applied filter first; otherwise it quits like q.
+			if m.list.FilterState() == list.Unfiltered {
+				return m.app, tea.Quit
+			}
 		case "f":
 			sel, ok := m.list.SelectedItem().(folderItem)
-			if ok && sel.path != "" && sel.section != "browse" && sel.section != "settings" {
+			if ok && sel.path != "" {
 				if m.app.state.IsFavoriteFolder(sel.path) {
 					m.app.state.RemoveFavoriteFolder(sel.path)
 				} else {
 					m.app.state.AddFavoriteFolder(sel.path)
 				}
 				_ = m.app.state.Save()
-				m.list.SetItems(buildFolderItems(m.app.state))
+				m.rebuild(sel)
 			}
 			return m.app, nil
 		}
@@ -184,8 +228,11 @@ func (m *folderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *folderModel) View() string {
-	help := helpStyle.Render("↑/↓ move · enter select · / filter · f star/unstar · i settings · q quit")
-	return lipgloss.JoinVertical(lipgloss.Left, m.list.View(), help)
+	text := "↑/↓ move · enter select · / filter · f star/unstar · i settings · q quit"
+	if m.list.FilterState() == list.Filtering {
+		text = "type to filter · enter select · esc cancel"
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, m.list.View(), helpStyle.Render(text))
 }
 
 func abbrev(p string) string {
@@ -205,8 +252,9 @@ type browseDoneMsg struct {
 type browseModel struct {
 	app     *app
 	cwd     string
-	entries []os.DirEntry
+	entries []string // subdirectory names
 	cursor  int
+	offset  int
 	err     error
 }
 
@@ -220,18 +268,25 @@ func newBrowseModel(a *app) *browseModel {
 func (m *browseModel) init() tea.Cmd { return nil }
 
 func (m *browseModel) refresh() {
+	m.entries = nil
+	m.offset = 0
 	entries, err := os.ReadDir(m.cwd)
-	if err != nil {
-		m.err = err
-		return
-	}
-	dirs := entries[:0]
+	m.err = err
 	for _, e := range entries {
-		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
-			dirs = append(dirs, e)
+		if strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		isDir := e.IsDir()
+		if e.Type()&os.ModeSymlink != 0 {
+			// Follow symlinks so linked project folders are browsable too.
+			if info, err := os.Stat(filepath.Join(m.cwd, e.Name())); err == nil {
+				isDir = info.IsDir()
+			}
+		}
+		if isDir {
+			m.entries = append(m.entries, e.Name())
 		}
 	}
-	m.entries = dirs
 	if m.cursor >= len(m.entries) {
 		m.cursor = 0
 	}
@@ -251,14 +306,22 @@ func (m *browseModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "left", "h", "backspace":
 			parent := parentOf(m.cwd)
 			if parent != m.cwd {
+				from := filepath.Base(m.cwd)
 				m.cwd = parent
 				m.cursor = 0
 				m.refresh()
+				// Land on the folder we just came out of.
+				for i, name := range m.entries {
+					if name == from {
+						m.cursor = i
+						break
+					}
+				}
 			}
 		case "enter", "right", "l":
 			// Descend into highlighted subdirectory.
 			if len(m.entries) > 0 {
-				m.cwd = childOf(m.cwd, m.entries[m.cursor].Name())
+				m.cwd = childOf(m.cwd, m.entries[m.cursor])
 				m.cursor = 0
 				m.refresh()
 			}
@@ -288,24 +351,28 @@ func (m *browseModel) View() string {
 	if m.app.state.IsFavoriteFolder(m.cwd) {
 		star = starStyle.Render(" ⭐")
 	}
-	b.WriteString(titleStyle.Render("Browse — " + abbrev(m.cwd) + star))
+	w, _ := m.app.size()
+	b.WriteString(truncate(titleStyle.Render("Browse — "+abbrev(m.cwd)+star), w))
 	b.WriteString("\n\n")
 	if m.err != nil {
-		b.WriteString(errorStyle.Render(m.err.Error()) + "\n")
-	}
-	if len(m.entries) == 0 {
+		b.WriteString(truncate("  "+errorStyle.Render(m.err.Error()), w) + "\n")
+	} else if len(m.entries) == 0 {
 		b.WriteString(mutedStyle.Render("  (no subdirectories)") + "\n")
 	}
-	for i, e := range m.entries {
-		marker := "  "
-		name := e.Name()
+	// Overhead: title, blank, scroll hint, help (2), error line.
+	start, end := scrollWindow(m.offset, m.cursor, len(m.entries), m.app.bodyHeight(6))
+	m.offset = start
+	for i := start; i < end; i++ {
+		marker, name := "  ", m.entries[i]+"/"
 		if i == m.cursor {
 			marker = highlightStyle.Render("▸ ")
 			name = highlightStyle.Render(name)
 		}
-		fmt.Fprintf(&b, "%s%s/\n", marker, name)
+		b.WriteString(truncate(marker+name, w) + "\n")
 	}
-	b.WriteString("\n")
+	if hint := scrollHint(start, end, len(m.entries)); hint != "" {
+		b.WriteString("  " + hintStyle.Render(hint) + "\n")
+	}
 	b.WriteString(helpStyle.Render("↑/↓ move · enter/→ descend · ←/h up · space pick this dir · f favorite · esc back"))
 	return b.String()
 }

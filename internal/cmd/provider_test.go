@@ -131,3 +131,67 @@ func TestLaunchProviderUsesExecForTerminalMode(t *testing.T) {
 		t.Fatal("exec was not called for terminal-mode provider")
 	}
 }
+
+// An explicitly saved empty flag set ("all off") must not fall back to the
+// provider's DefaultFlags.
+func TestResolveFlagsHonorsSavedEmptySet(t *testing.T) {
+	p := config.Provider{
+		ID:           "opencode",
+		Flags:        []config.Flag{{ID: "yolo", Flag: "--auto"}},
+		DefaultFlags: []string{"--auto"},
+	}
+	s := &state.State{}
+	s.SetPreferredFlags("opencode", []string{})
+	if got := resolveFlags(p, s, false, false); len(got) != 0 {
+		t.Fatalf("saved empty set should win over defaults, got %v", got)
+	}
+}
+
+// Flags saved under a CLI's old spelling are migrated, and flags the CLI no
+// longer accepts are dropped instead of crashing the launch.
+func TestResolveFlagsMigratesStaleSavedFlags(t *testing.T) {
+	p := config.Provider{
+		ID: "codex",
+		Flags: []config.Flag{
+			{ID: "full_auto", Flag: "--approve-for-me", Aliases: []string{"--full-auto"}},
+		},
+	}
+	s := &state.State{}
+	s.SetPreferredFlags("codex", []string{"--full-auto", "--removed-flag"})
+	got := resolveFlags(p, s, false, false)
+	if !reflect.DeepEqual(got, []string{"--approve-for-me"}) {
+		t.Fatalf("got %v", got)
+	}
+}
+
+// Direct launches must match the interactive picker: flags declared with
+// `default: true` are on unless the user saved a different choice.
+func TestResolveFlagsIncludesDeclaredDefaults(t *testing.T) {
+	p := config.Provider{
+		ID:    "opencode",
+		Flags: []config.Flag{{ID: "yolo", Flag: "--auto", Default: true}},
+	}
+	if got := resolveFlags(p, &state.State{}, false, false); !reflect.DeepEqual(got, []string{"--auto"}) {
+		t.Fatalf("got %v, want [--auto]", got)
+	}
+	if got := resolveFlags(p, &state.State{}, false, true); len(got) != 0 {
+		t.Fatalf("--safe should drop the default yolo flag, got %v", got)
+	}
+}
+
+func TestUnexpandHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cases := map[string]string{
+		home:                 "~",
+		home + "/api":        "~/api",
+		"/srv/app":           "/srv/app",
+		"~/already":          "~/already",
+		home + "sibling/api": home + "sibling/api",
+	}
+	for in, want := range cases {
+		if got := unexpandHome(in); got != want {
+			t.Errorf("unexpandHome(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

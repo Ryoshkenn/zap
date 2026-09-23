@@ -18,7 +18,7 @@ func newFavoriteCmd() *cobra.Command {
 		Short: "Star the current folder, a path, or a provider",
 		Long: `With no args, stars the current directory.
 With an existing path, stars that folder.
-With a known provider ID (claude, codex, gemini, opencode, ...), stars that provider.`,
+With a known provider ID (claude, codex, opencode, kimi, commandcode, ...), stars that provider.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return toggleFavorite(args, true)

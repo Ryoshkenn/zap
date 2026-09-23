@@ -1,11 +1,29 @@
 package launch
 
-import "strings"
+import (
+	"fmt"
+	"strings"
 
-// DefaultRemoteShell is the login shell used on the remote host to ensure the
-// provider command resolves on PATH. A login shell (-l) sources the user's
-// profile, which is where nvm/npm-global tools like `claude` live.
-const DefaultRemoteShell = "bash"
+	"github.com/Ryoshkenn/zap/internal/config"
+)
+
+// remoteLoginShell is used when no shell is configured for a host: the remote
+// user's own login shell, as reported by sshd. It is expanded on the remote side.
+const remoteLoginShell = `"$SHELL"`
+
+// ValidateSSHTarget rejects destinations ssh would misparse: an empty string,
+// embedded whitespace, or a leading '-' (which ssh reads as an option).
+func ValidateSSHTarget(target string) error {
+	switch {
+	case target == "":
+		return fmt.Errorf("ssh target is empty")
+	case strings.HasPrefix(target, "-"):
+		return fmt.Errorf("ssh target %q must not start with '-'", target)
+	case strings.ContainsAny(target, " \t\r\n"):
+		return fmt.Errorf("ssh target %q must not contain whitespace", target)
+	}
+	return nil
+}
 
 // shellQuote single-quotes s for POSIX shells, escaping embedded single quotes.
 func shellQuote(s string) string {
@@ -26,15 +44,22 @@ func quoteRemoteDir(dir string) string {
 }
 
 // BuildRemoteCommand produces the single command string handed to ssh. It cd's
-// into dir (if set) then exec's command + args inside a login shell so the
-// remote PATH is fully populated. shell defaults to DefaultRemoteShell.
+// into dir (if set) then exec's command + args inside a login, interactive
+// shell. Both matter: version managers (nvm, fnm, bun…) and most installers
+// add themselves to PATH in ~/.bashrc or ~/.zshrc, which a non-interactive
+// `bash -lc` never reads, so `claude` would be "command not found". ssh -t
+// provides the tty an interactive shell expects.
+//
+// shell picks the remote shell; empty means the remote user's own login shell.
+// command may include baked-in base args ("opencode run"); they are split out
+// so each word is quoted separately.
 //
 // Example: BuildRemoteCommand("~/proj", "claude", []string{"--yolo"}, "")
 //
-//	=> bash -lc 'cd ~/'\''proj'\'' && exec '\''claude'\'' '\''--yolo'\'''
+//	=> exec "$SHELL" -lic 'cd ~/'\''proj'\'' && exec '\''claude'\'' '\''--yolo'\'''
 func BuildRemoteCommand(dir, command string, args []string, shell string) string {
 	if shell == "" {
-		shell = DefaultRemoteShell
+		shell = remoteLoginShell
 	}
 	var inner strings.Builder
 	if dir != "" {
@@ -43,12 +68,17 @@ func BuildRemoteCommand(dir, command string, args []string, shell string) string
 		inner.WriteString(" && ")
 	}
 	inner.WriteString("exec ")
-	inner.WriteString(shellQuote(command))
+	bin, baseArgs := config.SplitCommand(command)
+	inner.WriteString(shellQuote(bin))
+	for _, a := range baseArgs {
+		inner.WriteByte(' ')
+		inner.WriteString(shellQuote(a))
+	}
 	for _, a := range args {
 		inner.WriteByte(' ')
 		inner.WriteString(shellQuote(a))
 	}
-	return shell + " -lc " + shellQuote(inner.String())
+	return "exec " + shell + " -lic " + shellQuote(inner.String())
 }
 
 // SSHArgs builds the argv (excluding the ssh binary itself) for launching

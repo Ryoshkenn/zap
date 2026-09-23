@@ -20,8 +20,55 @@ providers:
         flag: "--dangerously-bypass-approvals-and-sandbox"
         default: false
       - id: full_auto
-        label: "Full auto (ask-on-request + workspace-write sandbox)"
-        flag: "--full-auto"
+        label: "Auto-review approvals (workspace-write sandbox)"
+        flag: "--approve-for-me"
+        # codex removed --full-auto; saved preferences migrate to its successor.
+        aliases: ["--full-auto"]
+        default: false
+  - id: opencode
+    name: opencode
+    command: opencode
+    icon: "📂"
+    install_hint: "curl -fsSL https://opencode.ai/install | bash"
+    flags:
+      - id: yolo
+        label: "Auto-approve permissions that aren't explicitly denied"
+        flag: "--auto"
+        # Only `opencode run` accepts --dangerously-skip-permissions; the TUI rejects it.
+        aliases: ["--dangerously-skip-permissions"]
+        default: true
+  - id: kimi
+    name: Kimi Code
+    command: kimi
+    icon: "🌙"
+    install_hint: "curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash"
+    flags:
+      - id: yolo
+        label: "YOLO mode (auto-approve tool calls; may still ask questions)"
+        flag: "--yolo"
+        default: false
+      - id: auto
+        label: "Auto mode (fully autonomous, never asks questions)"
+        flag: "--auto"
+        default: false
+  - id: commandcode
+    name: Command Code
+    # The package also installs `cmd`, which collides with cmd.exe on Windows.
+    command: command-code
+    icon: "🟧"
+    install_hint: "npm install -g command-code"
+    flags:
+      - id: yolo
+        label: "YOLO mode (bypass all permission prompts)"
+        flag: "--yolo"
+        default: false
+      - id: accept_edits
+        label: "Accept edits mode"
+        flag: "--accept-edits"
+        default: false
+      - id: trust
+        label: "Auto-trust project (skip the initial trust prompt)"
+        flag: "--trust"
         default: false
   - id: gemini
     name: Gemini CLI
@@ -33,30 +80,10 @@ providers:
         label: "YOLO mode (auto-approve all tool calls)"
         flag: "--yolo"
         default: false
-  - id: opencode
-    name: opencode
-    command: opencode run
-    icon: "📂"
-    install_hint: "See https://github.com/sst/opencode"
-    flags:
-      - id: yolo
-        label: "Dangerously skip permissions"
-        flag: "--dangerously-skip-permissions"
-        default: true
-  - id: kimi
-    name: Kimi CLI
-    command: kimi
-    icon: "🌙"
-    install_hint: "curl -LsSf https://code.kimi.com/install.sh | bash"
-    flags:
-      - id: yolo
-        label: "YOLO mode (auto-approve all tool actions)"
-        flag: "--yolo"
-        default: false
   - id: cursor
     name: Cursor
     command: cursor
-    icon: "🖱️"
+    icon: "🧊"
     launch_mode: app
     app_bundle: "Cursor"
     install_hint: "Download from https://cursor.com"

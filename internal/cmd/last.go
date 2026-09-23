@@ -37,13 +37,16 @@ func newLastCmd(cfg *config.Config) *cobra.Command {
 			}
 			fmt.Fprintf(cmd.ErrOrStderr(), "↻ %s in %s\n", p.Name, where)
 
+			// Model-selector launches store ["run", <model>] rather than flags.
+			flags := l.Flags
+			if !p.ModelSelector {
+				flags = p.NormalizeFlags(flags)
+			}
+
 			// Remote replay.
 			if l.SSHTarget != "" {
 				if printOnly {
-					for _, a := range launch.SSHArgs(l.SSHTarget, l.Folder, p.Command, l.Flags, l.SSHShell) {
-						fmt.Printf("%s ", shellArg(a))
-					}
-					fmt.Println()
+					printSSH(launch.SSHArgs(l.SSHTarget, l.Folder, p.Command, flags, l.SSHShell))
 					return nil
 				}
 				telemetry.Track("zap_launch", map[string]any{
@@ -55,7 +58,7 @@ func newLastCmd(cfg *config.Config) *cobra.Command {
 					"trigger":     "last",
 				})
 				telemetry.Shutdown()
-				return launchSSH(l.SSHTarget, l.Folder, p.Command, l.Flags, l.SSHShell)
+				return launchSSH(l.SSHTarget, l.Folder, p.Command, flags, l.SSHShell)
 			}
 
 			// Local replay.
@@ -64,9 +67,9 @@ func newLastCmd(cfg *config.Config) *cobra.Command {
 				return fmt.Errorf("%s is no longer installed", p.Name)
 			}
 			if printOnly {
-				return printLocal(l.Folder, st.Provider.Command, l.Flags)
+				return printLocal(l.Folder, st.Provider.Command, flags)
 			}
-			recordLaunch(s, l.Folder, p.ID, l.Flags, l.Model, st)
+			recordLaunch(s, l.Folder, p.ID, flags, l.Model, st)
 			telemetry.Track("zap_launch", map[string]any{
 				"provider":    l.ProviderID,
 				"is_remote":   false,
@@ -76,7 +79,7 @@ func newLastCmd(cfg *config.Config) *cobra.Command {
 				"trigger":     "last",
 			})
 			telemetry.Shutdown()
-			return launchProvider(l.Folder, st, l.Flags, s)
+			return launchProvider(l.Folder, st, flags, s)
 		},
 	}
 	c.Flags().BoolVar(&printOnly, "print", false, "print the command instead of running it")

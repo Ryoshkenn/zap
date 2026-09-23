@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -31,11 +34,15 @@ func newSSHCmd(cfg *config.Config) *cobra.Command {
   zap ssh me@host claude ~/api   # launch Claude in ~/api on me@host
   zap ssh devbox codex --print   # show the ssh command instead of running it
 
-The remote command runs inside a login shell so the provider resolves on the
-remote PATH (override the shell with --shell if you don't use bash).`,
+The remote command runs inside your remote login shell, started as a login +
+interactive shell so PATH setup in ~/.profile and ~/.bashrc / ~/.zshrc (nvm,
+bun, ~/.local/bin…) is loaded. Pick a different shell with --shell.`,
 		Args: cobra.RangeArgs(1, 3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target := args[0]
+			if err := launch.ValidateSSHTarget(target); err != nil {
+				return err
+			}
 
 			s, _ := state.Load()
 			if host := lookupHostShell(s, target); shell == "" && host != "" {
@@ -45,7 +52,7 @@ remote PATH (override the shell with --shell if you don't use bash).`,
 			// Bare `zap ssh <target>` => interactive remote shell.
 			if len(args) == 1 {
 				if printOnly {
-					fmt.Printf("ssh -t %s\n", shellArg(target))
+					printSSH(launch.SSHArgs(target, "", "", nil, shell))
 					return nil
 				}
 				rememberHost(s, target, shell, "")
@@ -62,21 +69,23 @@ remote PATH (override the shell with --shell if you don't use bash).`,
 			if p == nil {
 				return fmt.Errorf("unknown provider %q (try `zap list`)", providerID)
 			}
+			// Mirror the interactive remote picker, which hides these too.
+			if p.LaunchMode == "app" {
+				return fmt.Errorf("%s opens a desktop app and can't be launched over ssh", p.Name)
+			}
+			if p.ModelSelector {
+				return fmt.Errorf("%s needs a locally chosen model and can't be launched over ssh", p.Name)
+			}
 
 			remoteDir := "~"
 			if len(args) == 3 {
-				remoteDir = args[2]
+				remoteDir = unexpandHome(args[2])
 			}
 
 			flags := resolveFlags(*p, s, yolo, safe)
 
 			if printOnly {
-				sshArgs := launch.SSHArgs(target, remoteDir, p.Command, flags, shell)
-				fmt.Print("ssh")
-				for _, a := range sshArgs {
-					fmt.Printf(" %s", shellArg(a))
-				}
-				fmt.Println()
+				printSSH(launch.SSHArgs(target, remoteDir, p.Command, flags, shell))
 				return nil
 			}
 
@@ -96,7 +105,7 @@ remote PATH (override the shell with --shell if you don't use bash).`,
 	c.Flags().BoolVar(&yolo, "yolo", false, "enable the provider's dangerous flag")
 	c.Flags().BoolVar(&safe, "safe", false, "disable any default dangerous flags")
 	c.Flags().BoolVar(&printOnly, "print", false, "print the ssh command instead of running it")
-	c.Flags().StringVar(&shell, "shell", "", "remote login shell used to resolve PATH (default bash)")
+	c.Flags().StringVar(&shell, "shell", "", "remote shell used to resolve PATH (default: your login shell on the remote)")
 	return c
 }
 
@@ -135,4 +144,23 @@ func rememberRemoteLaunch(s *state.State, target, shell, dir, providerID string,
 		SSHShell:   shell,
 	})
 	_ = s.Save()
+}
+
+// unexpandHome turns a path under the LOCAL home directory back into ~/….
+// An unquoted `zap ssh host claude ~/api` reaches zap already expanded by the
+// local shell (/Users/me/api), which rarely exists on the remote; the user
+// meant the remote home.
+func unexpandHome(dir string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" || home == "/" {
+		return dir
+	}
+	home = filepath.Clean(home)
+	switch {
+	case dir == home:
+		return "~"
+	case strings.HasPrefix(dir, home+"/"):
+		return "~/" + strings.TrimPrefix(dir, home+"/")
+	}
+	return dir
 }
