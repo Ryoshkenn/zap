@@ -11,14 +11,14 @@ import (
 	"github.com/Ryoshkenn/zap/internal/ui"
 )
 
-var Version = "v1.2.1"
+var Version = "v1.3.0"
 
 // NewRootCmd builds the cobra root with all subcommands wired in.
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "zap",
 		Short: "Terminal launcher for AI coding CLIs",
-		Long: `zap picks a folder and a provider (Claude, Codex, Gemini, opencode...) and
+		Long: `zap picks a folder and a provider (Claude, Codex, opencode, Kimi, Command Code...) and
 hands off control to that CLI in the chosen folder.
 
 Run "zap" with no args for the interactive picker, or use subcommands for fast launches:
